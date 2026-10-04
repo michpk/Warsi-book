@@ -18,7 +18,7 @@ service cloud.firestore {
     match /meta/shop {
       allow read: if signedIn();
       // Only the owner's e-mail can start the shop, and only once
-      allow create: if signedIn() && request.auth.token.email == 'OWNER_EMAIL'
+      allow create: if signedIn() && request.auth.token.email == 'warsihardwaresgd@gmail.com'
                     && request.resource.data.owner == request.auth.uid;
       allow update: if isOwner();
     }

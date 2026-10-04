@@ -11,7 +11,7 @@ const ctx = (uid, email) => env.authenticatedContext(uid, { email }).firestore()
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: "demo-warsi",
-    firestore: { rules: readFileSync("firestore.rules", "utf8").replaceAll("OWNER_EMAIL", OWNER) }
+    firestore: { rules: readFileSync("firestore.rules", "utf8").replaceAll("warsihardwaresgd@gmail.com", OWNER) }
   });
 });
 after(() => env.cleanup());
