@@ -1,0 +1,99 @@
+name: Build website and Android app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules:
+    name: Test security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - run: npm ci
+      - run: npx -y firebase-tools@14 emulators:exec --only firestore --project demo-warsi "node --test tests/"
+
+  web:
+    name: Website (GitHub Pages)
+    runs-on: ubuntu-latest
+    needs: rules
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx vite build
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  android:
+    name: Android app (APK)
+    runs-on: ubuntu-latest
+    needs: rules
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - run: npx vite build
+      - name: Create Android project
+        run: |
+          npx cap add android
+          npx cap sync android
+      - name: App icon, contacts permission, version
+        run: |
+          RES=android/app/src/main/res
+          rm -f $RES/mipmap-anydpi-v26/ic_launcher.xml $RES/mipmap-anydpi-v26/ic_launcher_round.xml
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do
+            cp resources/android/ic_launcher-$d.png $RES/mipmap-$d/ic_launcher.png
+            cp resources/android/ic_launcher-$d.png $RES/mipmap-$d/ic_launcher_round.png
+          done
+          sed -i 's#<uses-permission android:name="android.permission.INTERNET" />#<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.READ_CONTACTS" />#' android/app/src/main/AndroidManifest.xml
+          sed -i "s/versionCode 1$/versionCode ${{ github.run_number }}/; s/versionName \"1.0\"/versionName \"1.${{ github.run_number }}\"/" android/app/build.gradle
+          grep -n "READ_CONTACTS" android/app/src/main/AndroidManifest.xml
+          grep -n "versionCode\|versionName" android/app/build.gradle
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Sign APK
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          echo "$KS_B64" | base64 -d > release.keystore
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/zipalign -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          $BT/apksigner sign --ks release.keystore --ks-pass env:KS_PASS --ks-key-alias warsi --out warsi-book.apk aligned.apk
+          $BT/apksigner verify warsi-book.apk
+          rm release.keystore
+      - name: Publish APK to the "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: وارثی بک (تازہ ترین)
+          body: "Android: نیچے warsi-book.apk ڈاؤن لوڈ کر کے انسٹال کریں۔ Build ${{ github.run_number }}"
+          files: warsi-book.apk
+          make_latest: true
+          prerelease: false

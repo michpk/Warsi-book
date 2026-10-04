@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>وارثی بک</title>
+<meta name="theme-color" content="#0d6452">
+<meta name="description" content="ہارڈویئر دکان کا کھاتہ، اسٹاک، بل اور رپورٹس">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="وارثی بک">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div id="app" dir="rtl" lang="ur">
+  <header class="top"><div class="top-in">
+    <h1 class="brand">وارثی بک<small id="who"></small></h1>
+    <div class="spacer"></div>
+    <div class="branch-pick"><label for="branchSel">برانچ</label><select id="branchSel"></select></div>
+  </div></header>
+  <div class="shell">
+    <nav class="tabs" id="tabs" aria-label="حصے"></nav>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="sheet" hidden></div>
+<div id="auth" dir="rtl" lang="ur" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

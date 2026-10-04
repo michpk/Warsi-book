@@ -1,0 +1,6 @@
+{
+  "appId": "com.warsi.book",
+  "appName": "وارثی بک",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false }
+}

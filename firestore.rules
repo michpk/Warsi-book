@@ -1,0 +1,56 @@
+rules_version = '2';
+// Warsi Book access rules.
+// owner   – everything, including roles
+// manager – everything except changing other managers/owner
+// staff   – read all shop data, add and edit records; cannot delete or manage branches/people
+// pending / disabled – nothing until the owner approves
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function userDoc() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function role() { return signedIn() && exists(userDoc()) ? get(userDoc()).data.role : 'none'; }
+    function isOwner() { return role() == 'owner'; }
+    function isManager() { return role() in ['owner', 'manager']; }
+    function isStaff() { return role() in ['owner', 'manager', 'staff']; }
+    // staff may not soft-delete (del: true) — only managers
+    function noDelete() { return !('del' in request.resource.data) || request.resource.data.del != true || isManager(); }
+
+    match /meta/shop {
+      allow read: if signedIn();
+      // Only the owner's e-mail can start the shop, and only once
+      allow create: if signedIn() && request.auth.token.email == 'OWNER_EMAIL'
+                    && request.resource.data.owner == request.auth.uid;
+      allow update: if isOwner();
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || isManager());
+      allow list: if isManager();
+      allow create: if signedIn() && uid == request.auth.uid && (
+        request.resource.data.role == 'pending' ||
+        (request.resource.data.role == 'owner' &&
+         getAfter(/databases/$(database)/documents/meta/shop).data.owner == request.auth.uid));
+      allow update: if isOwner()
+        || (role() == 'manager' && uid != request.auth.uid
+            && resource.data.role in ['pending', 'staff', 'disabled']
+            && request.resource.data.role in ['pending', 'staff', 'disabled'])
+        || (uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'u']));
+      allow delete: if isOwner();
+    }
+
+    match /branches/{id} {
+      allow read: if isStaff();
+      // creating the first branch happens in the same batch that makes the owner
+      allow create: if isManager() || (id == 'main' && getAfter(userDoc()).data.role == 'owner');
+      allow update, delete: if isManager();
+    }
+
+    match /items/{id}     { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    match /customers/{id} { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    match /entries/{id}   { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    match /sales/{id}     { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    match /purchases/{id} { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    match /expenses/{id}  { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+  }
+}
