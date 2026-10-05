@@ -8,12 +8,12 @@
   1. سیکیورٹی رولز ٹیسٹ کرتا ہے (`tests/rules.test.mjs`)
   2. ویب سائٹ GitHub Pages پر لگاتا ہے
   3. اینڈرائیڈ APK بنا کر **Releases → latest** میں `warsi-book.apk` رکھتا ہے
-- APK پر دستخط کے لیے repository secrets: `ANDROID_KEYSTORE` (base64) اور `ANDROID_KEYSTORE_PASSWORD`۔
+- APK پر دستخط کی کی `android-signing/release.keystore.enc` میں تالے کے ساتھ محفوظ ہے؛ اس کا پاس ورڈ repository secret `ANDROID_KEYSTORE_PASSWORD` میں۔
   یہ کی ہمیشہ ایک ہی رہنی چاہیے، ورنہ پرانی ایپ پر نیا ورژن انسٹال نہیں ہوگا۔
 
 ## Firebase
 - `src/config.js` میں Firebase ویب ایپ کی سیٹنگ۔
-- `firestore.rules` کو Firebase Console → Firestore → Rules میں لگائیں (`OWNER_EMAIL` کی جگہ مالک کی ای میل)۔
+- `firestore.rules` کو Firebase Console → Firestore → Rules میں لگائیں ۔
 - ڈیٹا ڈیوائس پر محفوظ رہتا ہے؛ ہر بار صرف بدلے ہوئے ریکارڈ سرور سے آتے ہیں (`src/data.js`)۔
 
 ## کردار

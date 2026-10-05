@@ -79,10 +79,10 @@ jobs:
         run: ./gradlew assembleRelease --no-daemon
       - name: Sign APK
         env:
-          KS_B64: ${{ secrets.ANDROID_KEYSTORE }}
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          echo "$KS_B64" | base64 -d > release.keystore
+          if [ -z "$KS_PASS" ]; then echo "::error::Add the ANDROID_KEYSTORE_PASSWORD secret (Settings > Secrets and variables > Actions)"; exit 1; fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android-signing/release.keystore.enc -out release.keystore -pass env:KS_PASS
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $BT/zipalign -f -p 4 android/app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
           $BT/apksigner sign --ks release.keystore --ks-pass env:KS_PASS --ks-key-alias warsi --out warsi-book.apk aligned.apk
