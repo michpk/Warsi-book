@@ -2,6 +2,7 @@ import "./style.css";
 import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
+import { checkForUpdate, appVersion } from "./update.js";
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -1046,6 +1047,9 @@ function updTotal(){
 window.addEventListener("wb:refreshCust",()=>{if(S.openCust)sheetCust(S.openCust)});
 if(!isNative&&"serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
 initStatusBar();
+setTimeout(checkForUpdate,2500);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!document.getElementById("upd"))checkForUpdate.__t=(clearTimeout(checkForUpdate.__t),setTimeout(checkForUpdate,1500))});
+S.appVersion=appVersion();
 /* ---------- boot ---------- */
 import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile}));
 export {S};

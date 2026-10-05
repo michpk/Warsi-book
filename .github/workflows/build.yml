@@ -40,6 +40,10 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: npx vite build
+        env: { VITE_BUILD: "${{ github.run_number }}" }
+      - name: Publish version.json (build number + what's new)
+        run: node -e 'const fs=require("fs");const notes=JSON.parse(fs.readFileSync("public/changelog.json","utf8"));fs.writeFileSync("dist/version.json",JSON.stringify({build:Number(process.env.N),notes}))'
+        env: { N: "${{ github.run_number }}" }
       - uses: actions/upload-pages-artifact@v4
         with: { path: dist }
       - id: deploy
@@ -62,6 +66,7 @@ jobs:
           yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
       - run: npm ci
       - run: npx vite build
+        env: { VITE_BUILD: "${{ github.run_number }}" }
       - name: Create Android project
         run: |
           npx cap add android

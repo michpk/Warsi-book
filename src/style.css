@@ -275,3 +275,12 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .keypad .k-fn{font-size:14px;font-family:var(--f-body)}
 .lock-link{background:none;border:0;color:rgba(255,255,255,.85);text-decoration:underline;cursor:pointer;font-size:13px}
 .bio-btn{display:flex;align-items:center;gap:8px;background:var(--brass);color:#2a1e05;border:0;border-radius:999px;padding:10px 18px;font-weight:700;cursor:pointer}
+
+/* update / what's new dialog */
+#upd{position:fixed;inset:0;z-index:65;background:rgba(8,20,15,.55);display:flex;align-items:center;justify-content:center;padding:20px 16px}
+.upd-box{width:100%;max-width:400px;max-height:88vh;overflow:auto;background:var(--surface);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:10px;text-align:center;box-shadow:var(--shadow);border-top:4px solid var(--brass)}
+.upd-box h3{margin:0;font-family:var(--f-display);font-size:21px;line-height:2;color:var(--accent)}
+.upd-icon{font-size:34px}.upd-sub{margin:0;color:var(--muted);font-size:13px}
+.upd-sec{text-align:start;background:var(--bg);border-radius:10px;padding:8px 12px}.upd-sec b{font-size:14px}
+.upd-sec ul{margin:4px 0 0;padding-inline-start:18px;font-size:13.5px}
+.upd-box .btn{justify-content:center}

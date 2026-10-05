@@ -158,6 +158,7 @@ export function boot(ctx) {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1">ایپ لاک (PIN)</span><button class="btn sm" data-auth2="pin">PIN بدلیں</button></div>
         <label id="bioRow" style="display:none;align-items:center;gap:10px"><input type="checkbox" id="bioTog" ${lock.bioEnabled() ? "checked" : ""}> فنگر پرنٹ / چہرے سے کھولیں</label>
         <p class="note" style="margin:0">ایپ کھولنے پر اور ایک منٹ سے زیادہ بند رہنے کے بعد PIN یا فنگر پرنٹ مانگا جاتا ہے۔ PIN صرف اسی فون میں رہتا ہے۔</p>
+        <p class="note" style="margin:0">ایپ ورژن: <span class="num">${esc(S.appVersion || "")}</span></p>
       </div></section>
     ${S.isOwner ? `<section class="card pad" style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-size:15px">پرانی وارثی بک سے ڈیٹا لائیں</h3>
       <p class="note" style="margin:0">پرانی وارثی بک (Claude والی) میں "برانچیں" کے صفحے سے "سارا ڈیٹا فائل میں" دبا کر فائل بنائیں، پھر یہاں چنیں۔ یہ کام صرف ایک بار کریں۔</p>
