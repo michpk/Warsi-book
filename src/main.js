@@ -304,10 +304,10 @@ function vReport(){
     <div class="card stat"><span class="lbl">خرچے</span><span class="val">${fmt(R.expT)}</span></div>
     <div class="card stat ${R.net>=0?"pay":"owe"}"><span class="lbl">خالص منافع</span><span class="val">${fmt(R.net)}</span></div>
   </div>
-  <section class="card"><div class="card-h"><h3>${R.monthly?"ماہانہ":"روزانہ"} فروخت</h3><span class="note">${esc(R.label)}</span></div>
+  <section class="card"><div class="card-h"><h3>${R.monthly?"ماہانہ":"روزانہ"} فروخت</h3>${secDl("daily")}</div>
     ${R.saleT>0?chartSvg(R.series,R.monthly):`<div class="empty">اس عرصے میں کوئی فروخت نہیں۔</div>`}</section>
   <div class="grid2">
-    <section class="card"><div class="card-h"><h3>نفع و نقصان</h3><button class="btn ghost sm" data-act="copySummary">واٹس ایپ کے لیے کاپی</button></div>
+    <section class="card"><div class="card-h"><h3>نفع و نقصان</h3><div class="sec-dl"><button class="btn ghost sm" data-act="copySummary">کاپی</button>${secDl("pl")}</div></div>
       <div class="kv">
         <span class="k">کل فروخت</span><span class="v">${fmt(R.saleT)}</span>
         <span class="k">خرید لاگت (بکے مال کی)</span><span class="v">− ${fmt(R.cogs)}</span>
@@ -320,7 +320,7 @@ function vReport(){
       </div>
       <p class="note pad" style="padding-top:0;margin:0">منافع ہر چیز کے خرید ریٹ سے نکالا گیا ہے۔ جن چیزوں کا خرید ریٹ خالی ہو، ان کا پورا ریٹ منافع گنا جاتا ہے۔</p>
     </section>
-    <section class="card"><div class="card-h"><h3>نقد اور ادھار</h3></div>
+    <section class="card"><div class="card-h"><h3>نقد اور ادھار</h3>${secDl("cash")}</div>
       <div class="kv">
         <span class="k">نقد فروخت</span><span class="v">${fmt(R.paidT)}</span>
         <span class="k">ادھار فروخت</span><span class="v c-owe">${fmt(R.credit)}</span>
@@ -332,45 +332,62 @@ function vReport(){
       </div>
     </section>
   </div>
-  ${S.branch==="all"&&S.branches.length>1?`<section class="card"><div class="card-h"><h3>برانچوں کا موازنہ</h3></div>${tbl(["برانچ","بل","فروخت","مجموعی منافع","خرچے","خالص منافع"],R.br.map(b=>`<tr><td><strong>${esc(b.name)}</strong></td><td class="n num">${b.n}</td><td class="n num">${fq(Math.round(b.sales))}</td><td class="n num">${fq(Math.round(b.gross))}</td><td class="n num">${fq(Math.round(b.exp))}</td><td class="n num ${b.net>=0?"c-pay":"c-owe"}">${fq(Math.round(b.net))}</td></tr>`),"")}</section>`:""}
-  <section class="card"><div class="card-h"><h3>سب سے زیادہ بکنے والی چیزیں</h3>${dl&&R.items.length?`<button class="btn ghost sm" data-csv="items">CSV فائل</button>`:""}</div>
+  ${S.branch==="all"&&S.branches.length>1?`<section class="card"><div class="card-h"><h3>برانچوں کا موازنہ</h3>${secDl("branches")}</div>${tbl(["برانچ","بل","فروخت","مجموعی منافع","خرچے","خالص منافع"],R.br.map(b=>`<tr><td><strong>${esc(b.name)}</strong></td><td class="n num">${b.n}</td><td class="n num">${fq(Math.round(b.sales))}</td><td class="n num">${fq(Math.round(b.gross))}</td><td class="n num">${fq(Math.round(b.exp))}</td><td class="n num ${b.net>=0?"c-pay":"c-owe"}">${fq(Math.round(b.net))}</td></tr>`),"")}</section>`:""}
+  <section class="card"><div class="card-h"><h3>سب سے زیادہ بکنے والی چیزیں</h3>${secDl("items")}</div>
     ${tbl(["چیز","تعداد","فروخت","منافع"],R.items.slice(0,15).map(i=>`<tr><td>${esc(i.name)}</td><td class="n num">${fq(i.qty)} ${esc(i.unit)}</td><td class="n num">${fq(Math.round(i.rev))}</td><td class="n num ${i.prof>=0?"":"c-owe"}">${fq(Math.round(i.prof))}</td></tr>`),"اس عرصے میں کوئی چیز نہیں بکی۔")}</section>
   <div class="grid2">
-    <section class="card"><div class="card-h"><h3>بڑے گاہک (اس عرصے میں)</h3></div>
+    <section class="card"><div class="card-h"><h3>بڑے گاہک (اس عرصے میں)</h3>${secDl("custs")}</div>
       ${tbl(["گاہک","بل","خریداری"],R.custSales.slice(0,10).map(c=>`<tr><td>${esc(c.name)}</td><td class="n num">${c.n}</td><td class="n num">${fq(Math.round(c.v))}</td></tr>`),"کوئی فروخت نہیں۔")}</section>
-    <section class="card"><div class="card-h"><h3>خرچوں کی تفصیل</h3></div>
+    <section class="card"><div class="card-h"><h3>خرچوں کی تفصیل</h3>${secDl("exp")}</div>
       ${tbl(["قسم","رقم"],R.expCats.map(([k,v])=>`<tr><td>${esc(k)}</td><td class="n num">${fq(Math.round(v))}</td></tr>`),"اس عرصے میں کوئی خرچہ درج نہیں۔")}</section>
   </div>
-  <section class="card"><div class="card-h"><h3>گاہکوں کے بقایا جات (آج تک)</h3><div style="display:flex;gap:6px;align-items:center"><span class="pill owe num">${fmt(R.recv.reduce((a,r)=>a+r.v,0))}</span>${dl&&R.recv.length?`<button class="btn ghost sm" data-csv="recv">CSV فائل</button>`:""}</div></div>
+  <section class="card"><div class="card-h"><h3>گاہکوں کے بقایا جات (آج تک)</h3><div style="display:flex;gap:6px;align-items:center"><span class="pill owe num">${fmt(R.recv.reduce((a,r)=>a+r.v,0))}</span>${secDl("recv")}</div></div>
     ${tbl(["گاہک","فون","بقایا","آخری وصولی"],R.recv.map(r=>{const a=ago(r.last);return `<tr data-cust="${esc(r.c.id)}" style="cursor:pointer"><td><strong>${esc(r.c.name)}</strong></td><td class="n num">${esc(r.c.phone||"")}</td><td class="n num c-owe">${fq(Math.round(r.v))}</td><td class="n">${a===null?`<span class="pill warn">کبھی نہیں</span>`:`<span class="pill ${a>30?"warn":""}">${a===0?"آج":`<span class="num">${a}</span> دن پہلے`}</span>`}</td></tr>`}),"کسی گاہک کے ذمے بقایا نہیں۔")}</section>
-  <section class="card"><div class="card-h"><h3>سپلائرز کو دینے ہیں (آج تک)</h3><span class="pill pay num">${fmt(R.pay.reduce((a,r)=>a+r.v,0))}</span></div>
+  <section class="card"><div class="card-h"><h3>سپلائرز کو دینے ہیں (آج تک)</h3><div class="sec-dl"><span class="pill pay num">${fmt(R.pay.reduce((a,r)=>a+r.v,0))}</span>${secDl("pay")}</div></div>
     ${tbl(["سپلائر","فون","دینے ہیں"],R.pay.map(r=>`<tr data-cust="${esc(r.c.id)}" style="cursor:pointer"><td><strong>${esc(r.c.name)}</strong></td><td class="n num">${esc(r.c.phone||"")}</td><td class="n num c-pay">${fq(Math.round(r.v))}</td></tr>`),"کسی سپلائر کے پیسے باقی نہیں۔")}</section>
-  <section class="card"><div class="card-h"><h3>اسٹاک رپورٹ (آج تک)</h3>${dl&&S.items.length?`<button class="btn ghost sm" data-csv="stock">CSV فائل</button>`:""}</div>
+  <section class="card"><div class="card-h"><h3>اسٹاک رپورٹ (آج تک)</h3>${secDl("stock")}</div>
     ${(()=>{const b=S.branch,its=[...S.items].sort((x,y)=>stockOf(y,b)*(y.cost||0)-stockOf(x,b)*(x.cost||0));const tv=its.reduce((a,i)=>a+stockOf(i,b)*(Number(i.cost)||0),0),tsv=its.reduce((a,i)=>a+stockOf(i,b)*(Number(i.sale)||0),0),low=its.filter(i=>(Number(i.min)||0)>0&&stockOf(i,b)<=Number(i.min)).length;
       return `<div class="kv"><span class="k">مالیت خرید ریٹ پر</span><span class="v">${fmt(tv)}</span><span class="k">مالیت فروخت ریٹ پر</span><span class="v">${fmt(tsv)}</span><span class="k">کم اسٹاک والی چیزیں</span><span class="v">${low}</span></div>`+
       tbl(["چیز","اسٹاک","خرید ریٹ","مالیت"],its.slice(0,25).map(i=>`<tr data-item="${esc(i.id)}" style="cursor:pointer"><td>${esc(i.name)}</td><td class="n num">${fq(stockOf(i,b))} ${esc(i.unit||"")}</td><td class="n num">${fq(i.cost)}</td><td class="n num">${fq(Math.round(stockOf(i,b)*(Number(i.cost)||0)))}</td></tr>`),"اسٹاک میں کوئی چیز نہیں۔")})()}
   </section>`;
 }
 function csvOf(rows){return "\ufeff"+rows.map(r=>r.map(v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(",")).join("\r\n")}
-function reportSheets(R){
+const secDl=k=>`<div class="sec-dl"><button class="btn sm xls" data-sec="${k}:xlsx" aria-label="Excel">Excel</button><button class="btn sm pdf" data-sec="${k}:pdf" aria-label="PDF">PDF</button></div>`;
+function reportSections(R){
   const b=S.branch,d=t=>new Date(t).toLocaleDateString("en-GB"),rng=d(R.from)+" – "+d(R.to-1);
-  const sales=[...R.sales].sort((a,b2)=>a.date-b2.date);
-  return [
-    {name:"خلاصہ",widths:[32,18],rows:[[shopTitle()+" — رپورٹ"],[R.label+" ("+rng+")"],[S.branch==="all"?"تمام برانچیں":branchName(S.branch)],[],
-      ["کل فروخت",Math.round(R.saleT)],["بلوں کی تعداد",R.sales.length],["نقد فروخت",Math.round(R.paidT)],["ادھار فروخت",Math.round(R.credit)],["خرید لاگت (بکا مال)",Math.round(R.cogs)],["مجموعی منافع",Math.round(R.gross)],["دیگر آمدنی",Math.round(R.incT||0)],["خرچے",Math.round(R.expT)],["خالص منافع",Math.round(R.net)],[],
-      ["گاہکوں سے وصولی",Math.round(R.rec)],["خریداری",Math.round(R.purT)],["سپلائرز کو ادائیگی",Math.round(R.supPaid)],["کل بقایا (گاہک)",Math.round(R.recv.reduce((a,r)=>a+r.v,0))],["کل دینے ہیں (سپلائر)",Math.round(R.pay.reduce((a,r)=>a+r.v,0))]]},
-    {name:"بل",widths:[12,14,24,14,12,12,16],rows:[["تاریخ","بل نمبر","گاہک","کل","نقد","ادھار","برانچ"],...sales.map(s=>[d(s.date),s.no,s.custName||"نقد",Math.round(s.total),Math.round(s.paid),Math.round(s.total-s.paid),branchName(s.branch)])]},
-    {name:"بکنے والی چیزیں",widths:[30,10,10,14,14],rows:[["چیز","تعداد","یونٹ","فروخت","منافع"],...R.items.map(i=>[i.name,i.qty,i.unit,Math.round(i.rev),Math.round(i.prof)])]},
-    {name:"گاہک بقایا",widths:[26,16,14,16],rows:[["گاہک","فون","بقایا","آخری وصولی"],...R.recv.map(r=>[r.c.name,r.c.phone||"",Math.round(r.v),r.last?d(r.last):"کبھی نہیں"])]},
-    {name:"سپلائر",widths:[26,16,14],rows:[["سپلائر","فون","دینے ہیں"],...R.pay.map(r=>[r.c.name,r.c.phone||"",Math.round(r.v)])]},
-    {name:"خرچے",widths:[24,14],rows:[["قسم","رقم"],...R.expCats.map(([k,v])=>[k,Math.round(v)])]},
-    {name:"اسٹاک",widths:[30,16,10,10,12,12,14],rows:[["چیز","قسم","اسٹاک","یونٹ","خرید ریٹ","فروخت ریٹ","مالیت"],...S.items.map(i=>[i.name,i.cat||"",stockOf(i,b),i.unit||"",i.cost||0,i.sale||0,Math.round(stockOf(i,b)*(Number(i.cost)||0))])]}
-  ];
+  const sales=[...R.sales].sort((a,b2)=>a.date-b2.date),r=Math.round;
+  const bucketSales=R.series.map(x=>{const dt=new Date(x.t);return [R.monthly?dt.toLocaleDateString("en-GB",{month:"short",year:"numeric"}):d(x.t),x.n,r(x.v)]});
+  return {
+    summary:{name:"خلاصہ",file:"summary",widths:[32,18],rows:[["مد","رقم"],
+      ["کل فروخت",r(R.saleT)],["بلوں کی تعداد",R.sales.length],["نقد فروخت",r(R.paidT)],["ادھار فروخت",r(R.credit)],["خرید لاگت (بکا مال)",r(R.cogs)],["مجموعی منافع",r(R.gross)],["دیگر آمدنی",r(R.incT||0)],["خرچے",r(R.expT)],["خالص منافع",r(R.net)],
+      ["گاہکوں سے وصولی",r(R.rec)],["خریداری",r(R.purT)],["سپلائرز کو ادائیگی",r(R.supPaid)],["کل بقایا (گاہک)",r(R.recv.reduce((a,x)=>a+x.v,0))],["کل دینے ہیں (سپلائر)",r(R.pay.reduce((a,x)=>a+x.v,0))]]},
+    daily:{name:(R.monthly?"ماہانہ":"روزانہ")+" فروخت",file:"daily-sales",widths:[16,10,16],rows:[[R.monthly?"مہینہ":"تاریخ","بل","فروخت"],...bucketSales,["کل",R.sales.length,r(R.saleT)]]},
+    bills:{name:"بل",file:"bills",widths:[12,14,24,14,12,12,16],rows:[["تاریخ","بل نمبر","گاہک","کل","نقد","ادھار","برانچ"],...sales.map(x=>[d(x.date),x.no,x.custName||"نقد",r(x.total),r(x.paid),r(x.total-x.paid),branchName(x.branch)])]},
+    pl:{name:"نفع و نقصان",file:"profit-loss",widths:[30,16],rows:[["مد","رقم"],["کل فروخت",r(R.saleT)],["خرید لاگت (بکا مال)",-r(R.cogs)],["مجموعی منافع",r(R.gross)],["دیگر آمدنی",r(R.incT||0)],...R.expCats.map(([k,v])=>["خرچہ: "+k,-r(v)]),["کل خرچے",-r(R.expT)],["خالص منافع",r(R.net)]]},
+    cash:{name:"نقد اور ادھار",file:"cash-credit",widths:[30,16],rows:[["مد","رقم"],["نقد فروخت",r(R.paidT)],["ادھار فروخت",r(R.credit)],["گاہکوں سے وصولی",r(R.rec)],["خریداری (کل)",r(R.purT)],["ادھار خریداری",r(R.purCredit)],["سپلائرز کو ادائیگی",r(R.supPaid)]]},
+    branches:{name:"برانچوں کا موازنہ",file:"branches",widths:[20,8,14,14,12,14],rows:[["برانچ","بل","فروخت","مجموعی منافع","خرچے","خالص منافع"],...R.br.map(x=>[x.name,x.n,r(x.sales),r(x.gross),r(x.exp),r(x.net)])]},
+    items:{name:"بکنے والی چیزیں",file:"items-sold",widths:[30,10,10,14,14],rows:[["چیز","تعداد","یونٹ","فروخت","منافع"],...R.items.map(i=>[i.name,i.qty,i.unit,r(i.rev),r(i.prof)])]},
+    custs:{name:"بڑے گاہک",file:"top-customers",widths:[26,8,14,14],rows:[["گاہک","بل","خریداری","ادھار"],...R.custSales.map(c=>[c.name,c.n,r(c.v),r(c.cr)])]},
+    exp:{name:"خرچے",file:"expenses",widths:[24,14],rows:[["قسم","رقم"],...R.expCats.map(([k,v])=>[k,r(v)]),["کل",r(R.expT)]]},
+    recv:{name:"گاہک بقایا",file:"receivables",widths:[26,16,14,16],rows:[["گاہک","فون","بقایا","آخری وصولی"],...R.recv.map(x=>[x.c.name,x.c.phone||"",r(x.v),x.last?d(x.last):"کبھی نہیں"]),["کل","",r(R.recv.reduce((a,x)=>a+x.v,0)),""]]},
+    pay:{name:"سپلائر",file:"payables",widths:[26,16,14],rows:[["سپلائر","فون","دینے ہیں"],...R.pay.map(x=>[x.c.name,x.c.phone||"",r(x.v)]),["کل","",r(R.pay.reduce((a,x)=>a+x.v,0))]]},
+    stock:{name:"اسٹاک",file:"stock",widths:[30,16,16,10,12,12,14],rows:[["چیز","قسم","اسٹاک","یونٹ","خرید ریٹ","فروخت ریٹ","مالیت"],...S.items.map(i=>[i.name,i.cat||"",stockText(i,stockOf(i,b)),i.unit||"",i.cost||0,i.sale||0,r(stockOf(i,b)*(Number(i.cost)||0))])],live:true},
+    _meta:{rng,branch:S.branch==="all"?"تمام برانچیں":branchName(S.branch)}
+  };
+}
+function reportSheets(R){const x=reportSections(R),m=x._meta;const sum=x.summary;
+  return [{...sum,rows:[[shopTitle()+" — رپورٹ"],[R.label+" ("+m.rng+")"],[m.branch],[],...sum.rows]},x.daily,x.bills,x.pl,x.cash,...(S.branches.length>1?[x.branches]:[]),x.items,x.custs,x.exp,x.recv,x.pay,x.stock]}
+const secTbl=(x,max=200)=>`<table class="pd-tbl"><thead><tr>${x.rows[0].map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${x.rows.slice(1,max+1).map(r=>`<tr>${r.map(v=>`<td>${typeof v==="number"?fq(v):esc(v)}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${x.rows[0].length}">—</td></tr>`}</tbody></table>${x.rows.length-1>max?`<p class="pd-note">پہلی ${max} قطاریں۔ پوری فہرست Excel میں ہے۔</p>`:""}`;
+async function sectionFile(R,key,kind){
+  const all=reportSections(R),x=all[key],m=all._meta,sub=(x.live?"آج تک":R.label+" · "+m.rng)+" · "+m.branch;
+  const fname=x.file+"-"+todayStr();
+  if(kind==="xlsx")return sheetsToXlsx([{...x,rows:[[shopTitle()+" — "+x.name],[sub],[],...x.rows]}],fname+".xlsx");
+  return htmlToPdf(`${pdfHead(esc(x.name),esc(sub))}${secTbl(x)}`,fname+".pdf");
 }
 async function reportPdf(R){
-  const sh=reportSheets(R);
+  const sh=reportSheets(R),secs=reportSections(R);
   const tbl=(x,max=60)=>`<h3 class="pd-h3">${esc(x.name)}</h3><table class="pd-tbl"><thead><tr>${x.rows[0].map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${x.rows.slice(1,max+1).map(r=>`<tr>${r.map(v=>`<td>${typeof v==="number"?fq(v):esc(v)}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${x.rows[0].length}">—</td></tr>`}</tbody></table>${x.rows.length-1>max?`<p class="pd-note">پہلی ${max} قطاریں۔ پوری فہرست Excel میں ہے۔</p>`:""}`;
-  const sum=sh[0].rows.slice(4).filter(r=>r.length);
+  const sum=sh[0].rows.slice(5).filter(r=>r.length);
   const html=`${pdfHead("رپورٹ · "+esc(R.label),sh[0].rows[1][0].replace(R.label,"").trim()+" · "+esc(sh[0].rows[2][0]))}
     <div class="pd-grid">${sum.map(([k,v])=>`<div><span>${esc(k)}</span><b>${typeof v==="number"?fmt(v):esc(v)}</b></div>`).join("")}</div>
     ${sh.slice(1).map(x=>tbl(x)).join("")}`;
@@ -922,6 +939,7 @@ document.addEventListener("click",async ev=>{
   if(ds.billpdf){const x=S.sales.find(v=>v.id===ds.billpdf);if(x)busy(t,()=>billPdf(x));return}
   if(ds.purpdf){const x=S.purchases.find(v=>v.id===ds.purpdf);if(x)busy(t,()=>billPdf(x,true));return}
   if(ds.ledpdf){const x=S.customers.find(v=>v.id===ds.ledpdf);if(x)busy(t,()=>ledgerPdf(x));return}
+  if(ds.sec){const [k,kind]=ds.sec.split(":");busy(t,()=>sectionFile(S.lastReport||reportData(),k,kind));return}
   if(ds.rep){const R=S.lastReport||reportData();busy(t,()=>ds.rep==="xlsx"?sheetsToXlsx(reportSheets(R),"report-"+todayStr()+".xlsx"):reportPdf(R));return}
   if(ds.entvBtn){sheetEntryView(ds.entvBtn);return}
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
