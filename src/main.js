@@ -41,11 +41,11 @@ const sumA=a=>a.reduce((x,y)=>x+(Number(y.amt)||0),0);
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
-  for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase)continue;const c=ck(e.cust),sup=c.kind==="supplier";
+  for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp)continue;const c=ck(e.cust),sup=c.kind==="supplier";
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.amount,exp:x.id,att:(x.att||[]).length};if(x.dir==="in")inR.push({...r,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in")inR.push({...r,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?" (باقی ادھار)":"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
@@ -253,7 +253,7 @@ function reportData(){
   const expT=sum(exps,x=>x.amount),incT=sum(incs,x=>x.amount),purT=sum(purch,p=>p.total);
   const ck=id=>S.customers.find(c=>c.id===id)||{};
   const rec=sum(S.entries.filter(e=>inR(e)&&e.type==="got"&&!e.sale&&!e.purchase&&ck(e.cust).kind!=="supplier"),e=>e.amount);
-  const supPaid=sum(S.entries.filter(e=>inR(e)&&e.type==="gave"&&ck(e.cust).kind==="supplier"),e=>e.amount);
+  const supPaid=sum(S.entries.filter(e=>inR(e)&&e.type==="gave"&&!e.exp&&ck(e.cust).kind==="supplier"),e=>e.amount);
   // daily / monthly series
   const days=Math.round((to-from)/864e5),monthly=days>62,buckets=new Map();
   if(monthly){const d=new Date(from);d.setDate(1);while(d.getTime()<to){buckets.set(d.getFullYear()+"-"+d.getMonth(),{t:d.getTime(),v:0,n:0});d.setMonth(d.getMonth()+1)}}
@@ -767,6 +767,7 @@ function sheetExpView(id){
   openSheet(inc?"آمد کی تفصیل":"خرچے کی تفصیل",`
     <div class="bal-box ${inc?"pay":"owe"}"><div><div class="note">${esc(expCat(x))}</div><div class="v ${inc?"c-pay":"c-owe"}">${fmt(x.amount)}</div></div><div class="note"><span class="num">${dstr(x.date)}</span><br>${esc(branchName(x.branch))}${x.byName?" · "+esc(x.byName):""}</div></div>
     ${String(x.note||"").includes(" · ")?`<p style="margin:10px 0 0">${esc(String(x.note).split(" · ").slice(1).join(" · "))}</p>`:""}
+    ${x.suppName?`<div class="qr-row" style="margin-top:10px"><div><b>سپلائر: ${esc(x.suppName)}</b><div class="note">${x.paid!=null&&x.paid<x.amount?`نقد ${fmt(x.paid)} · ادھار ${fmt(x.amount-x.paid)} (سپلائر کے کھاتے میں)`:"پوری رقم نقد دی گئی"}</div>${x.supp?`<button class="btn sm" data-cust="${esc(x.supp)}">سپلائر کا کھاتہ کھولیں</button>`:""}</div></div>`:""}
     ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
     ${inc?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
@@ -808,8 +809,17 @@ async function loadAtt(id){
     box.innerHTML=d&&d.data?`<img src="${d.data}" alt="بل کی تصویر" data-openatt="${esc(id)}"><button type="button" class="btn sm" data-saveatt="${esc(id)}">محفوظ / بھیجیں</button>`:`<span class="note">تصویر نہیں ملی</span>`}
   catch(e){box.innerHTML=`<span class="note">انٹرنیٹ کے بغیر تصویر نہیں کھل سکتی</span>`}
 }
+function syncExpSupp(){
+  const v=(($("#xSupp")||{}).value||"").trim(),more=$("#xSuppMore");if(!more)return;more.hidden=!v;
+  const ex=S.customers.find(c=>c.kind==="supplier"&&(c.name||"").trim().toLowerCase()===v.toLowerCase());
+  const led=$("#xLedger").checked;$("#xLedOpts").hidden=!led;$("#xNewPhoneRow").hidden=!!ex||!v;
+  document.querySelectorAll("[data-xm]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.xm===S.xMode));
+  $("#xPaidRow").hidden=S.xMode!=="part";
+  const amt=num(($("#xAmt")||{}).value),paid=S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
+  $("#xSuppHint").textContent=!led?"":(ex?"":`"${v}" نام کا نیا سپلائر کھاتہ بن جائے گا۔ `)+(amt?(amt-paid>0?`${fmt(amt-paid)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا${paid?`، نقد ${fmt(paid)} روزنامچہ میں جائے گا`:""}۔`:`پوری رقم نقد دی گئی۔ کھاتے میں ریکارڈ رہے گا، بقایا نہیں بنے گا۔`):"");
+}
 function sheetExpense(dir="out"){
-  const inc=dir==="in";S.photos=[];
+  const inc=dir==="in";S.photos=[];S.xMode="cash";
   openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
     <div class="two"><div class="fld"><label for="xAmt">رقم</label><input id="xAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
@@ -819,6 +829,18 @@ function sheetExpense(dir="out"){
     <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> یہ ${inc?"آمدنی":"خرچہ"} منافع کے حساب میں شامل ہو</label>
     ${inc?`<label class="sale-toggle"><input type="checkbox" id="xSale" name="sale"> <span><b>اسے فروخت میں شمار کریں</b><small>ٹک کریں تو یہ رقم آج کی فروخت، روزانہ فروخت اور رپورٹس میں "فروخت" میں جڑے گی۔ ٹک نہ کریں تو صرف آمد رہے گی۔</small></span></label>`:""}
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
+    ${inc?"":`<div class="supp-box">
+      <div class="fld"><label for="xSupp">سپلائر / دکاندار (اختیاری)</label><input id="xSupp" name="supp" list="xSuppList" autocomplete="off" placeholder="نام لکھیں یا چنیں، ورنہ خالی چھوڑیں"><datalist id="xSuppList">${S.customers.filter(c=>c.kind==="supplier").map(c=>`<option value="${esc(c.name)}">`).join("")}</datalist></div>
+      <div id="xSuppMore" hidden>
+        <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xLedger" name="ledger" checked> یہ خرچہ اس سپلائر کے کھاتے میں بھی درج کریں</label>
+        <div id="xLedOpts">
+          <div class="fld" id="xNewPhoneRow" hidden><label for="xSuppPhone">نیا سپلائر · فون نمبر (اختیاری)</label><input id="xSuppPhone" name="suppPhone" inputmode="tel" dir="ltr" placeholder="03xx xxxxxxx"></div>
+          <div class="fld"><span class="lbl-sm">ادائیگی</span><div class="seg"><button type="button" data-xm="cash" aria-pressed="true">پوری نقد دی</button><button type="button" data-xm="credit" aria-pressed="false">ادھار (بعد میں دیں گے)</button><button type="button" data-xm="part" aria-pressed="false">کچھ نقد</button></div></div>
+          <div class="fld" id="xPaidRow" hidden><label for="xPaid">نقد کتنا دیا</label><input id="xPaid" name="paid" class="num" inputmode="decimal" placeholder="0"></div>
+          <p class="note" id="xSuppHint" style="margin:0"></p>
+        </div>
+      </div>
+    </div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
@@ -918,8 +940,16 @@ document.addEventListener("submit",async ev=>{
     const amt=num(d.amount);if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=catList(dir).find(([c])=>c===cat);
-    const att=savePhotos({kind:"expense"});
-    ok=await w(()=>db.add("expenses",{amount:amt,dir,att,sale:dir==="in"&&!!d.sale,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
+    const sname=dir==="out"?(d.supp||"").trim():"",link=!!sname&&!!d.ledger;
+    const paid=!link?amt:S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(d.paid),amt);
+    const att=savePhotos({kind:"expense"}),xid=newId("expenses"),ops=[];
+    let sup=link?S.customers.find(c=>c.kind==="supplier"&&(c.name||"").trim().toLowerCase()===sname.toLowerCase()):null;
+    if(link&&!sup){sup={id:newId("customers"),name:sname};ops.push({op:"set",col:"customers",id:sup.id,data:{name:sname,phone:(d.suppPhone||"").trim(),kind:"supplier",branch:d.branch||"",address:"",createdAt:Date.now(),...by()}})}
+    const note=cat+(d.note.trim()?" · "+d.note.trim():"");
+    ops.push({op:"set",col:"expenses",id:xid,data:{amount:amt,paid,dir,att,sale:dir==="in"&&!!d.sale,pl:known?known[1]:!!d.pl,note,date:dt,branch:d.branch||"",...(link?{supp:sup.id,suppName:sup.name}:sname?{suppName:sname}:{}),...by()}});
+    if(link){ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:amt,note:"خرچہ: "+note,date:dt,branch:d.branch||"",exp:xid,...by()}});
+      if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خرچہ (نقد ادا): "+cat,date:dt+1,branch:d.branch||"",exp:xid,...by()}})}
+    ok=await w(()=>db.batch(ops));
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="addphoto"){
@@ -1005,6 +1035,7 @@ document.addEventListener("click",async ev=>{
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
+  if(ds.xm){S.xMode=ds.xm;syncExpSupp();return}
   if(ds.bk){S.bulkKind=ds.bk;document.querySelectorAll("[data-bk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.bk===ds.bk));return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
@@ -1016,7 +1047,7 @@ document.addEventListener("click",async ev=>{
   if(ds.prm){S.pcart.splice(+ds.prm,1);render();return}
   if(ds.pickc){fillContact(S.contacts[+ds.pickc]);return}
   if(ds.delexp){const box=$("#dx_"+CSS.escape(ds.delexp));if(box)box.innerHTML=`<div class="confirm">یہ خرچہ حذف کریں؟<button class="btn owe sm" data-delexpyes="${esc(ds.delexp)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
-  if(ds.delexpyes){if(await w(()=>db.remove("expenses",ds.delexpyes)))toast("حذف ہو گیا");return}
+  if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);closeSheet();toast("حذف ہو گیا")}return}
   if(ds.cust){sheetCust(ds.cust);return}
   if(ds.item){sheetItem(ds.item);return}
   if(ds.salev){sheetSale(ds.salev);return}
@@ -1075,6 +1106,7 @@ document.addEventListener("input",e=>{
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
   if(t.id==="xCat")syncCat();
+  if(["xSupp","xAmt","xPaid"].includes(t.id))syncExpSupp();
   if(t.dataset.bf){const [i,f]=t.dataset.bf.split(":");if(S.bulk&&S.bulk[+i])S.bulk[+i][f]=f==="balance"?t.value:t.value}
   if(t.id==="iSaleSize")t.dataset.touched="1";
   if(["iBuySize","iSaleSize","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
@@ -1085,6 +1117,7 @@ document.addEventListener("change",e=>{
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
