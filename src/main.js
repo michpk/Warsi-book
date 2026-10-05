@@ -27,7 +27,8 @@ const TABS=[["home","خلاصہ"],["khata","کھاتے"],["sale","بل"],["cash"
 
 const S={branches:[],items:[],customers:[],entries:[],sales:[],purchases:[],expenses:[],contacts:null,billMode:"sale",pcart:[],pSupp:"",pPaid:"",saleMode:"cash",pMode:"cash",saleLedger:true,pLedger:true,shopName:"",updCost:true,cashDate:"",rp:"month",rFrom:"",rTo:"",loaded:{},tab:"home",branch:"all",q:"",stockQ:"",kind:"customer",
   canWrite:true,isAdmin:false,uid:null,noDb:false,cart:[],saleCust:"",salePaid:""};
-try{S.branch=localStorage.getItem("hk_branch")||"all";S.tab=localStorage.getItem("hk_tab")||"home"}catch(e){}
+try{S.branch=localStorage.getItem("hk_branch")||"all"}catch(e){}
+S.tab="home"; // always open on the summary tab
 const me={uid:null,name:"",role:null};
 
 /* ---------- derived ---------- */
@@ -935,7 +936,7 @@ document.addEventListener("click",async ev=>{
   const t=ev.target.closest("button,a,tr[data-item]");if(!t)return;
   const ds=t.dataset;
   if(t.id==="sheet")return;
-  if(ds.tab){S.tab=ds.tab;try{localStorage.setItem("hk_tab",S.tab)}catch(e){};render();window.scrollTo(0,0);return}
+  if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.go){S.tab=ds.go;render();return}
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
