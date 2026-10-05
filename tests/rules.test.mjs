@@ -59,7 +59,8 @@ test("owner approves; staff works but cannot delete or manage", async () => {
 });
 
 test("manager can delete and manage staff but not promote", async () => {
-  await assertSucceeds(setDoc(doc(ctx("own", OWNER), "users/mg1"), { role: "manager", name: "Kashif" }));
+  await assertSucceeds(setDoc(doc(ctx("mg1", "mgr@test.pk"), "users/mg1"), { role: "pending", name: "Kashif" }));
+  await assertSucceeds(updateDoc(doc(ctx("own", OWNER), "users/mg1"), { role: "manager" }));
   const db = ctx("mg1", "mgr@test.pk");
   await assertSucceeds(updateDoc(doc(db, "items/i1"), { del: true }));
   await assertSucceeds(setDoc(doc(db, "branches/b2"), { name: "Saddar" }));
