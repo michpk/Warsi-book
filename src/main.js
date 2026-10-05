@@ -185,7 +185,7 @@ function vPurchase(){
       <datalist id="pItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${fq(stockOf(it,bid))} ${esc(it.unit||"")} · خرید Rs ${fq(it.cost)}</option>`).join("")}</datalist>
       <span class="note">نئی چیز ہو تو پہلے "اسٹاک" میں شامل کریں۔</span>
     </div>
-    ${S.pcart.length?`<div>${S.pcart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div class="note">ابھی: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.sunit||l.unit||"")} · تعداد ${esc(l.unit||"")} میں${(l.per||1)!==1?` · 1 ${esc(l.unit)} = ${fq(l.per)} ${esc(l.sunit)}`:""}</div></div><input id="pq${i}" data-pq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="pp${i}" data-pp="${i}" inputmode="decimal" value="${l.price}" aria-label="خرید ریٹ"><button class="x" data-prm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
+    ${S.pcart.length?`<div>${S.pcart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div class="note">ابھی: ${esc(stockText(S.items.find(x=>x.id===l.item)||{},stockOf(S.items.find(x=>x.id===l.item)||{},bid)))} · تعداد ${esc(l.unit||"")} میں${(l.per||1)!==1&&!l.varBuy?` · 1 ${esc(l.unit)} = ${fq(l.buySize)} پیس`:""}</div></div><input id="pq${i}" data-pq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="pp${i}" data-pp="${i}" inputmode="decimal" value="${l.price}" aria-label="خرید ریٹ"><button class="x" data-prm="${i}" aria-label="ہٹائیں">×</button>${l.varBuy?`<label class="pbs">اس خریداری میں 1 ${esc(l.unit)} = <input id="pbs${i}" data-pbs="${i}" inputmode="decimal" value="${l.buySize}"> پیس <span class="note">(یاد رکھا جائے گا)</span></label>`:""}</div>`).join("")}
       <div class="total-bar"><span>کل رقم</span><span class="num" id="pTotal">${fmt(total)}</span></div></div>`
     :`<div class="note">چیز چنیں، پھر تعداد اور خرید ریٹ لکھیں۔ محفوظ کرنے پر اسٹاک بڑھ جائے گا۔</div>`}
     ${payBlock("purchase",total)}
@@ -416,7 +416,7 @@ function vStock(){
   </div>
   <input class="search" id="sq" type="search" placeholder="چیز یا قسم سے تلاش (مثلاً پائپ، پینٹ)" value="${esc(S.stockQ)}">
   <section class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th>چیز</th><th>قسم</th><th class="n">${b==="all"?"کل اسٹاک":"اسٹاک"}</th><th class="n">فروخت ریٹ</th><th class="n">خرید ریٹ</th></tr></thead><tbody>
-  ${list.map(it=>{const s=stockOf(it,b),low=(Number(it.min)||0)>0&&s<=Number(it.min);return `<tr data-item="${esc(it.id)}" style="cursor:pointer"><td><strong>${esc(it.name)}</strong></td><td class="c-muted">${esc(it.cat||"")}</td><td class="n"><span class="pill ${low?"warn":""} num">${fq(s)} ${esc(it.unit||"")}</span>${(Number(it.per)||1)>1?`<div class="note num">≈ ${fq(Math.round(s/it.per*100)/100)} ${esc(it.buyUnit)}</div>`:""}</td><td class="n num">${fq(it.sale)}</td><td class="n num c-muted">${fq(it.cost)}</td></tr>`}).join("")}
+  ${list.map(it=>{const s=stockOf(it,b),low=(Number(it.min)||0)>0&&s<=Number(it.min);return `<tr data-item="${esc(it.id)}" style="cursor:pointer"><td><strong>${esc(it.name)}</strong></td><td class="c-muted">${esc(it.cat||"")}</td><td class="n"><span class="pill ${low?"warn":""} num">${esc(stockText(it,s))}</span>${it.buyUnit&&it.buyUnit!==it.unit&&itemSizes(it).per>0?`<div class="note num">≈ ${fq(Math.round(s/itemSizes(it).per*100)/100)} ${esc(it.buyUnit)}</div>`:""}</td><td class="n num">${fq(it.sale)}</td><td class="n num c-muted">${fq(it.cost)}</td></tr>`}).join("")}
   </tbody></table></div>`:`<div class="empty"><strong>${q?"کوئی چیز نہیں ملی":"ابھی اسٹاک میں کوئی چیز نہیں"}</strong><span>ہر چیز کا نام، یونٹ (عدد، فٹ، کلو، لیٹر، بیگ)، خرید اور فروخت ریٹ ڈالیں۔ پھر "آمد" سے اسٹاک بڑھائیں۔</span>${!q&&S.canWrite?`<button class="btn primary" data-act="newItem">+ پہلی چیز شامل کریں</button>`:""}</div>`}</section>`;
 }
 
@@ -554,51 +554,71 @@ function entryFormHtml(type){
 const UNITS=["عدد","درجن","ڈبی","ڈبہ","پیکٹ","کلو","گرام","لیٹر","کوارٹر","گیلن","ڈرمی","فٹ","گز","میٹر","رول","بیگ","سیٹ","جوڑا","بنڈل","شیٹ","ٹن"];
 const unitSelect=(id,val)=>{const known=UNITS.includes(val);return `<select id="${id}Sel" data-unitsel="${id}">${UNITS.map(u=>`<option ${u===val?"selected":""}>${u}</option>`).join("")}<option value="__other" ${val&&!known?"selected":""}>دیگر (خود لکھیں)</option></select><input id="${id}Other" placeholder="یونٹ کا نام" value="${val&&!known?esc(val):""}" ${val&&!known?"":"hidden"} style="margin-top:6px">`};
 const unitVal=id=>{const v=($("#"+id+"Sel")||{}).value;return v==="__other"?(($("#"+id+"Other")||{}).value||"").trim()||"عدد":v};
-function sheetItemForm(it){
-  it=it||{};const unit=it.unit||"عدد",per=Number(it.per)||1,diff=!!(it.buyUnit&&it.buyUnit!==unit&&per!==1)||(it.buyUnit&&it.buyUnit!==unit),buyUnit=it.buyUnit||"ڈبی";
-  const buyCost=it.buyCost??(it.cost!=null?Math.round(Number(it.cost)*per*100)/100:"");
-  openSheet(it.id?"چیز میں ترمیم":"نئی چیز",`<form class="f" data-form="item" data-id="${esc(it.id||"")}">
-    <div class="fld"><label for="iName">نام</label><input id="iName" name="name" required value="${esc(it.name||"")}" placeholder="مثلاً PVC پائپ ½ انچ"></div>
-    <div class="fld"><label for="iCat">قسم</label><input id="iCat" name="cat" list="catList" value="${esc(it.cat||"")}" placeholder="پلمبنگ، الیکٹرک، پینٹ…"><datalist id="catList">${[...new Set(S.items.map(x=>x.cat).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+/* Unit model: stock is kept in the sale unit. Both units can be described in pieces:
+   1 buy-unit = buySize pieces, 1 sale-unit = saleSize pieces  ->  per = buySize / saleSize sale-units per buy-unit.
+   Example: screws, 1 ڈبی = 100 پیس, sold by درجن (12 پیس) -> 1 ڈبی = 8.33 درجن.
+   Nails: 1 کلو = (varies) پیس -> varBuy, confirmed at each purchase and remembered. */
+const defSize=u=>u==="درجن"?12:1;
+const itemSizes=it=>{const per=Number(it.per)||1;const saleSize=Number(it.saleSize)||(it.buySize?defSize(it.unit):1);const buySize=Number(it.buySize)||per*saleSize;return {saleSize,buySize,per:buySize/saleSize}};
+function stockText(it,q){
+  const {saleSize}=itemSizes(it);q=Number(q)||0;
+  if(saleSize>1&&Math.abs(q-Math.round(q))>1e-6){const neg=q<0;q=Math.abs(q);const w=Math.floor(q+1e-9),pcs=Math.round((q-w)*saleSize);return (neg?"-":"")+(w?fq(w)+" "+(it.unit||"")+" ":"")+(pcs?pcs+" پیس":"")}
+  return fq(q)+" "+(it.unit||"");
+}
+function sheetItemForm(it,copy){
+  it=it||{};const unit=it.unit||"عدد",sz=itemSizes(it),diff=!!(it.buyUnit&&it.buyUnit!==unit),buyUnit=it.buyUnit||"ڈبی";
+  const buyCost=it.buyCost??(it.cost!=null?Math.round(Number(it.cost)*sz.per*100)/100:"");
+  const editId=copy?"":(it.id||"");
+  openSheet(editId?"چیز میں ترمیم":copy?"اسی جیسی نئی چیز":"نئی چیز",`<form class="f" data-form="item" data-id="${esc(editId)}">
+    <div class="fld"><label for="iName">نام</label><input id="iName" name="name" required value="${esc(copy?"":(it.name||""))}" placeholder="${copy?esc(it.name)+" (نیا سائز)":"مثلاً اسٹیل کیل 2 انچ"}"></div>
+    <div class="fld"><label for="iCat">قسم</label><input id="iCat" name="cat" list="catList" value="${esc(it.cat||"")}" placeholder="پلمبنگ، الیکٹرک، کیل، پیچ…"><datalist id="catList">${[...new Set(S.items.map(x=>x.cat).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
     <div class="fld"><label for="iUnitSel">فروخت کا یونٹ (اسٹاک اسی میں گنا جائے گا)</label>${unitSelect("iUnit",unit)}</div>
-    <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iDiff" ${diff?"checked":""}> خریداری کسی اور یونٹ میں ہوتی ہے (مثلاً خریدی ڈبی میں، بیچی درجن میں)</label>
+    <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iDiff" ${diff?"checked":""}> خریداری کسی اور یونٹ میں ہوتی ہے (مثلاً پیچ ڈبی میں، کیل کلو میں)</label>
     <div class="buy-box" id="buyBox" ${diff?"":"hidden"}>
-      <div class="two"><div class="fld"><label for="iBuySel">خرید کا یونٹ</label>${unitSelect("iBuy",buyUnit)}</div>
-      <div class="fld"><label for="iPer" id="iPerLbl">ایک ${esc(buyUnit)} میں کتنے ${esc(unit)}؟</label><input id="iPer" name="per" class="num" inputmode="decimal" value="${diff?per:""}" placeholder="مثلاً 12"></div></div>
-      <p class="note" id="iConv" style="margin:0"></p>
+      <div class="fld"><label for="iBuySel">خرید کا یونٹ</label>${unitSelect("iBuy",buyUnit)}</div>
+      <div class="two">
+        <div class="fld"><label for="iBuySize" id="iBuySizeLbl">ایک ${esc(buyUnit)} میں کتنے پیس؟</label><input id="iBuySize" name="buySize" class="num" inputmode="decimal" value="${diff?esc(sz.buySize):""}" placeholder="مثلاً 100"></div>
+        <div class="fld"><label for="iSaleSize" id="iSaleSizeLbl">ایک ${esc(unit)} میں کتنے پیس؟</label><input id="iSaleSize" name="saleSize" class="num" inputmode="decimal" value="${esc(diff?sz.saleSize:defSize(unit))}"></div>
+      </div>
+      <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iVar" name="varBuy" ${it.varBuy?"checked":""}> پیس کی تعداد ہر خریداری پر بدل سکتی ہے (مثلاً کیل فی کلو)۔ خریداری کے بل میں پوچھی جائے گی اور یاد رکھی جائے گی۔</label>
+      <p class="conv" id="iConv"></p>
     </div>
     <div class="two"><div class="fld"><label for="iCost" id="iCostLbl">خرید ریٹ (فی ${esc(diff?buyUnit:unit)})</label><input id="iCost" name="cost" class="num" inputmode="decimal" value="${esc(buyCost)}"></div>
     <div class="fld"><label for="iSale" id="iSaleLbl">فروخت ریٹ (فی ${esc(unit)})</label><input id="iSale" name="sale" class="num" inputmode="decimal" required value="${esc(it.sale??"")}"></div></div>
     <div class="two"><div class="fld"><label for="iMin" id="iMinLbl">کم از کم اسٹاک (${esc(unit)})</label><input id="iMin" name="min" class="num" inputmode="decimal" value="${esc(it.min??"")}"></div>
-    ${!it.id?`<div class="fld"><label for="iOpen" id="iOpenLbl">موجودہ اسٹاک (${esc(unit)}، ${esc(branchName(defBranch()))})</label><input id="iOpen" name="open" class="num" inputmode="decimal" placeholder="0"></div>`:"<div></div>"}</div>
+    ${!editId?`<div class="fld"><label for="iOpen" id="iOpenLbl">موجودہ اسٹاک (${esc(unit)}، ${esc(branchName(defBranch()))})</label><input id="iOpen" name="open" class="num" inputmode="decimal" placeholder="0"></div>`:"<div></div>"}</div>
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
   syncItemForm();
 }
 function syncItemForm(){
   if(!$("#iUnitSel"))return;
   for(const id of ["iUnit","iBuy"]){const o=$("#"+id+"Other"),sel=$("#"+id+"Sel");if(o&&sel)o.hidden=sel.value!=="__other"}
-  const u=unitVal("iUnit"),diff=$("#iDiff").checked,bu=unitVal("iBuy"),per=num(($("#iPer")||{}).value)||0;
+  const u=unitVal("iUnit"),diff=$("#iDiff").checked,bu=unitVal("iBuy");
+  const ss=$("#iSaleSize");if(ss&&!ss.dataset.touched)ss.value=defSize(u);
+  const bs=num(($("#iBuySize")||{}).value)||0,sz=num((ss||{}).value)||1,per=bs/sz;
   $("#buyBox").hidden=!diff;
   const set=(id,t)=>{const el=$("#"+id);if(el)el.textContent=t};
-  set("iPerLbl",`ایک ${bu} میں کتنے ${u}؟`);set("iCostLbl",`خرید ریٹ (فی ${diff?bu:u})`);set("iSaleLbl",`فروخت ریٹ (فی ${u})`);set("iMinLbl",`کم از کم اسٹاک (${u})`);
+  set("iBuySizeLbl",`ایک ${bu} میں کتنے پیس؟`);set("iSaleSizeLbl",`ایک ${u} میں کتنے پیس؟`);
+  set("iCostLbl",`خرید ریٹ (فی ${diff?bu:u})`);set("iSaleLbl",`فروخت ریٹ (فی ${u})`);set("iMinLbl",`کم از کم اسٹاک (${u})`);
   const ol=$("#iOpenLbl");if(ol)ol.textContent=ol.textContent.replace(/\(([^،]*)،/,`(${u}،`);
   const c=num(($("#iCost")||{}).value);
-  set("iConv",diff&&per>0?`1 ${bu} = ${fq(per)} ${u}${c?` · ایک ${u} کی لاگت ≈ Rs ${fq(Math.round(c/per*100)/100)}`:""}`:"");
+  set("iConv",diff&&bs>0?`1 ${bu} = ${fq(bs)} پیس = ${fq(Math.round(per*1000)/1000)} ${u}${c?` · ایک ${u} کی لاگت ≈ Rs ${fq(Math.round(c/per*100)/100)}`:""}`:"");
 }
 function sheetItem(id){
   const it=S.items.find(x=>x.id===id);if(!it)return;S.openItem=id;
   openSheet(it.name,`
    <div class="tbl-wrap card" style="box-shadow:none"><table><thead><tr><th>برانچ</th><th class="n">اسٹاک</th></tr></thead><tbody>
-   ${S.branches.map(b=>`<tr><td>${esc(b.name)}</td><td class="n num">${fq(stockOf(it,b.id))} ${esc(it.unit||"")}</td></tr>`).join("")}
-   <tr><td><strong>کل</strong></td><td class="n num"><strong>${fq(stockOf(it,"all"))}</strong></td></tr></tbody></table></div>
-   <p class="note">فروخت ریٹ <span class="num">${fq(it.sale)}</span> · خرید ریٹ <span class="num">${fq(it.cost)}</span> · کم از کم <span class="num">${fq(it.min)}</span></p>
+   ${S.branches.map(b=>`<tr><td>${esc(b.name)}</td><td class="n num">${esc(stockText(it,stockOf(it,b.id)))}</td></tr>`).join("")}
+   <tr><td><strong>کل</strong></td><td class="n num"><strong>${esc(stockText(it,stockOf(it,"all")))}</strong></td></tr></tbody></table></div>
+   <p class="note">فروخت ریٹ <span class="num">${fq(it.sale)}</span> فی ${esc(it.unit||"")} · خرید ریٹ <span class="num">${fq(it.buyCost??it.cost)}</span> فی ${esc(it.buyUnit||it.unit||"")} · کم از کم <span class="num">${fq(it.min)}</span></p>
+   ${it.buyUnit&&it.buyUnit!==it.unit?`<p class="conv">1 ${esc(it.buyUnit)} = ${fq(itemSizes(it).buySize)} پیس = ${fq(Math.round(itemSizes(it).per*1000)/1000)} ${esc(it.unit)}${it.varBuy?" · (ہر خریداری پر بدل سکتی ہے)":""}</p>`:""}
    ${S.canWrite?`<form class="f" data-form="move" data-id="${esc(it.id)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r)">
      <div class="two"><div class="fld"><label for="mType">کام</label><select id="mType" name="type"><option value="in">آمد (مال آیا)</option><option value="out">کمی / خراب مال</option><option value="set">گنتی درست کریں</option>${S.branches.length>1?`<option value="transfer">دوسری برانچ بھیجیں</option>`:""}</select></div>
      <div class="fld"><label for="mQty">تعداد</label><input id="mQty" name="qty" class="num" inputmode="decimal" required></div></div>
      <div class="two"><div class="fld"><label for="mFrom">برانچ</label><select id="mFrom" name="from">${branchOptions(defBranch())}</select></div>
      <div class="fld"><label for="mTo">بھیجیں (صرف ٹرانسفر)</label><select id="mTo" name="to">${branchOptions(S.branches.find(b=>b.id!==defBranch())?.id)}</select></div></div>
      <div class="actions"><button class="btn primary">اسٹاک اپڈیٹ کریں</button></div></form>
-     <div class="actions" style="margin-top:10px"><button class="btn sm" data-edititem="${esc(it.id)}">چیز میں ترمیم</button></div>`:""}`);
+     <div class="actions" style="margin-top:10px"><button class="btn sm" data-copyitem="${esc(it.id)}">اسی جیسی نئی چیز (نیا سائز)</button><button class="btn sm" data-edititem="${esc(it.id)}">چیز میں ترمیم</button></div>`:""}`);
 }
 function sheetBranch(b){
   b=b||{};
@@ -795,9 +815,11 @@ document.addEventListener("submit",async ev=>{
     if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
   }
   if(kind==="item"){
-    const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,per=diff?(num(d.per)||1):1,buyCost=num(d.cost);
-    if(diff&&!(num(d.per)>0)){toast("بتائیں کہ ایک "+buyUnit+" میں کتنے "+unit+" ہیں");if(btn)btn.disabled=false;return}
-    const body={name:d.name.trim(),cat:d.cat.trim(),unit,buyUnit,per,buyCost,cost:Math.round(buyCost/per*10000)/10000,sale:num(d.sale),min:num(d.min)};
+    const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,buyCost=num(d.cost);
+    const saleSize=diff?(num(d.saleSize)||1):1,buySize=diff?num(d.buySize):1;
+    if(diff&&!(buySize>0)){toast("بتائیں کہ ایک "+buyUnit+" میں کتنے پیس ہیں");if(btn)btn.disabled=false;return}
+    const per=buySize/saleSize;
+    const body={name:d.name.trim(),cat:d.cat.trim(),unit,buyUnit,saleSize,buySize,per,varBuy:diff&&!!d.varBuy,buyCost,cost:Math.round(buyCost/per*10000)/10000,sale:num(d.sale),min:num(d.min)};
     if(id)ok=await w(()=>db.update("items",id,body));
     else{const b=defBranch();ok=await w(()=>db.add("items",{...body,stock:b?{[b]:num(d.open)}:{},createdAt:Date.now()}))}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
@@ -860,7 +882,9 @@ async function saveSale(){
 
 async function savePurchase(){
   const bid=S.branch!=="all"?S.branch:(S.branches[0]||{}).id;
-  const lines=S.pcart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,unit:l.unit||"",per:l.per||1}));
+  if(S.pcart.some(l=>l.qty>0&&l.varBuy&&!(l.buySize>0))){toast("ہر چیز کے لیے بتائیں کہ ایک یونٹ میں کتنے پیس ہیں");return}
+  const lines=S.pcart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,unit:l.unit||"",per:l.per||1,buySize:l.buySize||null}));
+  const sizeChg={};for(const l of S.pcart)if(l.varBuy&&l.buySize>0&&l.buySize!==l.origBuySize)sizeChg[l.item]={buySize:l.buySize,per:l.per};
   if(!lines.length)return;
   const total=lines.reduce((a,l)=>a+l.qty*l.price,0);
   const {paid,due}=payCalc("purchase",total);
@@ -872,7 +896,7 @@ async function savePurchase(){
   const ref={id:newId("purchases")},ops=[{op:"set",col:"purchases",id:ref.id,data:{no,branch:bid,supp:sup?sup.id:null,suppName:sup?sup.name:"",lines,total,paid,date:Date.now(),...by()}}];
   if(toLedger){const t=Date.now();ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:total,note:"خریداری #"+no+" (مال آیا)",date:t,branch:bid,...by(),purchase:ref.id}});
     if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خریداری #"+no+" (نقد ادا)",date:t+1,branch:bid,...by(),purchase:ref.id}});}
-  for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:Math.round(l.qty*(l.per||1)*1000)/1000,extra:S.updCost&&l.price>0?{cost:Math.round(l.price/(l.per||1)*10000)/10000,buyCost:l.price}:{}});
+  for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:Math.round(l.qty*(l.per||1)*1000)/1000,extra:{...(sizeChg[l.item]||{}),...(S.updCost&&l.price>0?{cost:Math.round(l.price/(l.per||1)*10000)/10000,buyCost:l.price}:{})}});
   const ok=await w(()=>db.batch(ops));
   if(!ok){if(btn)btn.disabled=false;return}
   S.pcart=[];S.pSupp="";S.pPaid="";S.pMode="cash";render();toast("خریداری #"+no+" محفوظ");sheetPurchase(ref.id);
@@ -918,6 +942,7 @@ document.addEventListener("click",async ev=>{
   if(ds.item){sheetItem(ds.item);return}
   if(ds.salev){sheetSale(ds.salev);return}
   if(ds.editcust){sheetCustForm(S.customers.find(c=>c.id===ds.editcust));return}
+  if(ds.copyitem){sheetItemForm(S.items.find(c=>c.id===ds.copyitem),true);return}
   if(ds.edititem){sheetItemForm(S.items.find(c=>c.id===ds.edititem));return}
   if(ds.editbranch){sheetBranch(S.branches.find(c=>c.id===ds.editbranch));return}
   if(ds.setbranch){S.branch=ds.setbranch;try{localStorage.setItem("hk_branch",S.branch)}catch(e){};S.tab="home";render();return}
@@ -963,11 +988,13 @@ document.addEventListener("input",e=>{
   if(t.dataset.cp!==undefined){S.cart[+t.dataset.cp].price=num(t.value);updTotal()}
   if(t.id==="salePaid"){S.salePaid=t.value;updTotal()}
   if(t.dataset.pq!==undefined){S.pcart[+t.dataset.pq].qty=num(t.value);updPTotal()}
+  if(t.dataset.pbs!==undefined){const l=S.pcart[+t.dataset.pbs];l.buySize=num(t.value)||0;l.per=l.buySize/(l.saleSize||1)}
   if(t.dataset.pp!==undefined){S.pcart[+t.dataset.pp].price=num(t.value);updPTotal()}
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
   if(t.id==="xCat")syncCat();
-  if(["iPer","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
+  if(t.id==="iSaleSize")t.dataset.touched="1";
+  if(["iBuySize","iSaleSize","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
 });
 document.addEventListener("change",e=>{
   const t=e.target;
@@ -981,7 +1008,7 @@ document.addEventListener("change",e=>{
   if(t.id==="cashDate"){S.cashDate=t.value;render()}
   if(t.id==="rFrom"){S.rFrom=t.value;render()}
   if(t.id==="rTo"){S.rTo=t.value;render()}
-  if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*(Number(it.per)||1)*100)/100,unit:it.buyUnit||it.unit,per:Number(it.per)||1,sunit:it.unit});render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else{const z=itemSizes(it);S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*z.per*100)/100,unit:it.buyUnit||it.unit,per:z.per,sunit:it.unit,buySize:z.buySize,saleSize:z.saleSize,varBuy:!!it.varBuy,origBuySize:z.buySize})}render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
   if((t.id==="camIn"||t.id==="galIn")&&t.files&&t.files.length){addPhotos([...t.files]);t.value=""}
   if((t.id==="ledCam"||t.id==="ledGal")&&t.files&&t.files[0]){ledgerPhoto(t.dataset.ent,t.files[0]);t.value=""}
   if(t.id==="vcfIn"&&t.files&&t.files[0]){const r=new FileReader();r.onload=()=>{const list=parseVcf(String(r.result||""));if(!list.length){toast("اس فائل میں کوئی نمبر نہیں ملا");return}S.contacts=list;renderContactBox("")};r.readAsText(t.files[0]);t.value=""}
