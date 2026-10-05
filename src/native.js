@@ -13,19 +13,42 @@ export async function pickPhoneContact() {
   return { name: (c.name && (c.name.display || [c.name.given, c.name.family].filter(Boolean).join(" "))) || "", phone: ((c.phones || [])[0] || {}).number || "" };
 }
 
-export async function saveFile(filename, text, mime) {
+/* Save a file. On the phone: offer the share sheet (WhatsApp, Drive, Files…); if that is not
+   possible, keep a copy in the phone's Documents folder. On the website: normal download. */
+export async function saveBinary(filename, base64, mime) {
   if (isNative) {
-    const { Filesystem, Directory, Encoding } = await import("@capacitor/filesystem");
-    const { Share } = await import("@capacitor/share");
-    const res = await Filesystem.writeFile({ path: filename, data: text, directory: Directory.Cache, encoding: Encoding.UTF8 });
-    await Share.share({ title: filename, url: res.uri, dialogTitle: "فائل بھیجیں یا محفوظ کریں" });
-    return;
+    const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    const res = await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Cache });
+    try {
+      const { Share } = await import("@capacitor/share");
+      await Share.share({ title: filename, url: res.uri, dialogTitle: "فائل محفوظ کریں یا بھیجیں" });
+      return "shared";
+    } catch (e) {
+      if (/cancel/i.test(String(e && (e.message || e)))) return "cancelled";
+      await Filesystem.writeFile({ path: "WarsiBook/" + filename, data: base64, directory: Directory.Documents, recursive: true });
+      return "Documents/WarsiBook/" + filename;
+    }
   }
-  const blob = new Blob([text], { type: mime + ";charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = filename;
+  const bin = atob(base64), buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([buf], { type: mime }));
+  const a = document.createElement("a"); a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return "downloaded";
+}
+const utf8b64 = t => { const b = new TextEncoder().encode(t); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); };
+export function saveFile(filename, text, mime) { return saveBinary(filename, utf8b64(text), mime + ";charset=utf-8"); }
+
+// Keep the app below the phone's status bar, in the shop's green.
+export async function initStatusBar() {
+  if (!isNative) return;
+  try {
+    const { StatusBar, Style } = await import("@capacitor/status-bar");
+    await StatusBar.setOverlaysWebView({ overlay: false });
+    await StatusBar.setBackgroundColor({ color: "#0a5444" });
+    await StatusBar.setStyle({ style: Style.Dark });
+  } catch (e) { /* older phones: nothing to do */ }
 }
 
 // Open WhatsApp with a ready message. Pakistani numbers like 0300-1234567 become 923001234567.
@@ -48,17 +71,7 @@ export function openSMS(phone, text) {
 }
 
 // Save or share a photo (data: URL).
-export async function saveImage(filename, dataUrl) {
-  if (isNative) {
-    const { Filesystem, Directory } = await import("@capacitor/filesystem");
-    const { Share } = await import("@capacitor/share");
-    const res = await Filesystem.writeFile({ path: filename, data: dataUrl.split(",")[1], directory: Directory.Cache });
-    await Share.share({ title: filename, url: res.uri, dialogTitle: "تصویر بھیجیں یا محفوظ کریں" });
-    return;
-  }
-  const a = document.createElement("a"); a.href = dataUrl; a.download = filename;
-  document.body.appendChild(a); a.click(); a.remove();
-}
+export function saveImage(filename, dataUrl) { return saveBinary(filename, dataUrl.split(",")[1], "image/jpeg"); }
 
 // Shrink a photo so a bill stays readable but the file stays small (well under Firestore's 1 MB limit).
 export function compressImage(file, maxSide = 1400) {

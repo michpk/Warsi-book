@@ -1,6 +1,7 @@
 import "./style.css";
 import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
-import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage } from "./native.js";
+import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
+import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -184,7 +185,7 @@ function vPurchase(){
       <datalist id="pItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${fq(stockOf(it,bid))} ${esc(it.unit||"")} · خرید Rs ${fq(it.cost)}</option>`).join("")}</datalist>
       <span class="note">نئی چیز ہو تو پہلے "اسٹاک" میں شامل کریں۔</span>
     </div>
-    ${S.pcart.length?`<div>${S.pcart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div class="note">ابھی: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.unit||"")}</div></div><input id="pq${i}" data-pq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="pp${i}" data-pp="${i}" inputmode="decimal" value="${l.price}" aria-label="خرید ریٹ"><button class="x" data-prm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
+    ${S.pcart.length?`<div>${S.pcart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div class="note">ابھی: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.sunit||l.unit||"")} · تعداد ${esc(l.unit||"")} میں${(l.per||1)!==1?` · 1 ${esc(l.unit)} = ${fq(l.per)} ${esc(l.sunit)}`:""}</div></div><input id="pq${i}" data-pq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="pp${i}" data-pp="${i}" inputmode="decimal" value="${l.price}" aria-label="خرید ریٹ"><button class="x" data-prm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
       <div class="total-bar"><span>کل رقم</span><span class="num" id="pTotal">${fmt(total)}</span></div></div>`
     :`<div class="note">چیز چنیں، پھر تعداد اور خرید ریٹ لکھیں۔ محفوظ کرنے پر اسٹاک بڑھ جائے گا۔</div>`}
     ${payBlock("purchase",total)}
@@ -206,9 +207,9 @@ function vCash(){
   const {inR,out}=cashFlow(from,to),tin=sumA(inR),tout=sumA(out);
   const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
   return `${readOnlyBanner()}
-  <div class="sec-head"><h2 class="h">روزنامچہ</h2><div class="spacer"></div>
-    <input type="date" id="cashDate" class="search" style="flex:0 0 auto;min-width:0" value="${d}" aria-label="تاریخ">
-    ${S.canWrite?`<button class="btn pay" data-act="newInc">+ آمد</button><button class="btn owe" data-act="newExp">+ خرچہ</button>`:""}</div>
+  <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
+  <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" value="${d}"></label>
+    ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button>`:""}</div>
   <div class="stats">
     <div class="card stat"><span class="lbl">پچھلا کیش (حساب سے)</span><span class="val">${fmt(open)}</span></div>
     <div class="card stat pay"><span class="lbl">آج آمد</span><span class="val">${fmt(tin)}</span></div>
@@ -288,12 +289,13 @@ function chartSvg(series,monthly){
   return `<div class="chart-wrap" id="chartWrap"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${monthly?"ماہانہ":"روزانہ"} فروخت">${g}${bars}</svg><div class="tip" id="tip" hidden></div></div>`;
 }
 function vReport(){
-  const R=reportData(),P=[["today","آج"],["yday","کل"],["week","یہ ہفتہ"],["month","یہ مہینہ"],["lmonth","پچھلا مہینہ"],["year","یہ سال"],["custom","تاریخیں چنیں"]];
+  const R=reportData();S.lastReport=R;const P=[["today","آج"],["yday","کل"],["week","یہ ہفتہ"],["month","یہ مہینہ"],["lmonth","پچھلا مہینہ"],["year","یہ سال"],["custom","تاریخیں چنیں"]];
   const dl=true;
   const tbl=(head,rows,empty)=>rows.length?`<div class="tbl-wrap"><table><thead><tr>${head.map((h,i)=>`<th${i?' class="n"':""}>${h}</th>`).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`:`<div class="empty">${empty}</div>`;
   const ago=t=>t?Math.floor((Date.now()-t)/864e5):null;
   return `<div class="sec-head"><h2 class="h">رپورٹس</h2><div class="spacer"></div><span class="pill">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))}</span></div>
   <div class="chips">${P.map(([k,l])=>`<button class="chip" data-rp="${k}" aria-pressed="${S.rp===k}">${l}</button>`).join("")}</div>
+  <div class="dl-bar"><span>${PDF_ICON} پوری رپورٹ ڈاؤن لوڈ کریں</span><button class="btn xls" data-rep="xlsx">Excel</button><button class="btn pdf" data-rep="pdf">PDF</button></div>
   ${S.rp==="custom"?`<div class="range-row"><label for="rFrom" class="note">سے</label><input type="date" id="rFrom" value="${S.rFrom}"><label for="rTo" class="note">تک</label><input type="date" id="rTo" value="${S.rTo||todayStr()}"></div>`:""}
   <p class="note" style="margin:0"><span class="num">${new Date(R.from).toLocaleDateString("en-GB")}</span> سے <span class="num">${new Date(R.to-1).toLocaleDateString("en-GB")}</span> تک</p>
   <div class="stats">
@@ -350,6 +352,30 @@ function vReport(){
   </section>`;
 }
 function csvOf(rows){return "\ufeff"+rows.map(r=>r.map(v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(",")).join("\r\n")}
+function reportSheets(R){
+  const b=S.branch,d=t=>new Date(t).toLocaleDateString("en-GB"),rng=d(R.from)+" – "+d(R.to-1);
+  const sales=[...R.sales].sort((a,b2)=>a.date-b2.date);
+  return [
+    {name:"خلاصہ",widths:[32,18],rows:[[shopTitle()+" — رپورٹ"],[R.label+" ("+rng+")"],[S.branch==="all"?"تمام برانچیں":branchName(S.branch)],[],
+      ["کل فروخت",Math.round(R.saleT)],["بلوں کی تعداد",R.sales.length],["نقد فروخت",Math.round(R.paidT)],["ادھار فروخت",Math.round(R.credit)],["خرید لاگت (بکا مال)",Math.round(R.cogs)],["مجموعی منافع",Math.round(R.gross)],["دیگر آمدنی",Math.round(R.incT||0)],["خرچے",Math.round(R.expT)],["خالص منافع",Math.round(R.net)],[],
+      ["گاہکوں سے وصولی",Math.round(R.rec)],["خریداری",Math.round(R.purT)],["سپلائرز کو ادائیگی",Math.round(R.supPaid)],["کل بقایا (گاہک)",Math.round(R.recv.reduce((a,r)=>a+r.v,0))],["کل دینے ہیں (سپلائر)",Math.round(R.pay.reduce((a,r)=>a+r.v,0))]]},
+    {name:"بل",widths:[12,14,24,14,12,12,16],rows:[["تاریخ","بل نمبر","گاہک","کل","نقد","ادھار","برانچ"],...sales.map(s=>[d(s.date),s.no,s.custName||"نقد",Math.round(s.total),Math.round(s.paid),Math.round(s.total-s.paid),branchName(s.branch)])]},
+    {name:"بکنے والی چیزیں",widths:[30,10,10,14,14],rows:[["چیز","تعداد","یونٹ","فروخت","منافع"],...R.items.map(i=>[i.name,i.qty,i.unit,Math.round(i.rev),Math.round(i.prof)])]},
+    {name:"گاہک بقایا",widths:[26,16,14,16],rows:[["گاہک","فون","بقایا","آخری وصولی"],...R.recv.map(r=>[r.c.name,r.c.phone||"",Math.round(r.v),r.last?d(r.last):"کبھی نہیں"])]},
+    {name:"سپلائر",widths:[26,16,14],rows:[["سپلائر","فون","دینے ہیں"],...R.pay.map(r=>[r.c.name,r.c.phone||"",Math.round(r.v)])]},
+    {name:"خرچے",widths:[24,14],rows:[["قسم","رقم"],...R.expCats.map(([k,v])=>[k,Math.round(v)])]},
+    {name:"اسٹاک",widths:[30,16,10,10,12,12,14],rows:[["چیز","قسم","اسٹاک","یونٹ","خرید ریٹ","فروخت ریٹ","مالیت"],...S.items.map(i=>[i.name,i.cat||"",stockOf(i,b),i.unit||"",i.cost||0,i.sale||0,Math.round(stockOf(i,b)*(Number(i.cost)||0))])]}
+  ];
+}
+async function reportPdf(R){
+  const sh=reportSheets(R);
+  const tbl=(x,max=60)=>`<h3 class="pd-h3">${esc(x.name)}</h3><table class="pd-tbl"><thead><tr>${x.rows[0].map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${x.rows.slice(1,max+1).map(r=>`<tr>${r.map(v=>`<td>${typeof v==="number"?fq(v):esc(v)}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${x.rows[0].length}">—</td></tr>`}</tbody></table>${x.rows.length-1>max?`<p class="pd-note">پہلی ${max} قطاریں۔ پوری فہرست Excel میں ہے۔</p>`:""}`;
+  const sum=sh[0].rows.slice(4).filter(r=>r.length);
+  const html=`${pdfHead("رپورٹ · "+esc(R.label),sh[0].rows[1][0].replace(R.label,"").trim()+" · "+esc(sh[0].rows[2][0]))}
+    <div class="pd-grid">${sum.map(([k,v])=>`<div><span>${esc(k)}</span><b>${typeof v==="number"?fmt(v):esc(v)}</b></div>`).join("")}</div>
+    ${sh.slice(1).map(x=>tbl(x)).join("")}`;
+  return await htmlToPdf(html,"report-"+todayStr()+".pdf");
+}
 async function exportCsv(kind){
   const R=reportData(),b=S.branch,tag=todayStr();let rows,name;
   if(kind==="items"){rows=[["Item","Qty","Unit","Sales","Profit"],...R.items.map(i=>[i.name,i.qty,i.unit,Math.round(i.rev),Math.round(i.prof)])];name="items-sold-"+tag+".csv"}
@@ -390,7 +416,7 @@ function vStock(){
   </div>
   <input class="search" id="sq" type="search" placeholder="چیز یا قسم سے تلاش (مثلاً پائپ، پینٹ)" value="${esc(S.stockQ)}">
   <section class="card">${list.length?`<div class="tbl-wrap"><table><thead><tr><th>چیز</th><th>قسم</th><th class="n">${b==="all"?"کل اسٹاک":"اسٹاک"}</th><th class="n">فروخت ریٹ</th><th class="n">خرید ریٹ</th></tr></thead><tbody>
-  ${list.map(it=>{const s=stockOf(it,b),low=(Number(it.min)||0)>0&&s<=Number(it.min);return `<tr data-item="${esc(it.id)}" style="cursor:pointer"><td><strong>${esc(it.name)}</strong></td><td class="c-muted">${esc(it.cat||"")}</td><td class="n"><span class="pill ${low?"warn":""} num">${fq(s)} ${esc(it.unit||"")}</span></td><td class="n num">${fq(it.sale)}</td><td class="n num c-muted">${fq(it.cost)}</td></tr>`}).join("")}
+  ${list.map(it=>{const s=stockOf(it,b),low=(Number(it.min)||0)>0&&s<=Number(it.min);return `<tr data-item="${esc(it.id)}" style="cursor:pointer"><td><strong>${esc(it.name)}</strong></td><td class="c-muted">${esc(it.cat||"")}</td><td class="n"><span class="pill ${low?"warn":""} num">${fq(s)} ${esc(it.unit||"")}</span>${(Number(it.per)||1)>1?`<div class="note num">≈ ${fq(Math.round(s/it.per*100)/100)} ${esc(it.buyUnit)}</div>`:""}</td><td class="n num">${fq(it.sale)}</td><td class="n num c-muted">${fq(it.cost)}</td></tr>`}).join("")}
   </tbody></table></div>`:`<div class="empty"><strong>${q?"کوئی چیز نہیں ملی":"ابھی اسٹاک میں کوئی چیز نہیں"}</strong><span>ہر چیز کا نام، یونٹ (عدد، فٹ، کلو، لیٹر، بیگ)، خرید اور فروخت ریٹ ڈالیں۔ پھر "آمد" سے اسٹاک بڑھائیں۔</span>${!q&&S.canWrite?`<button class="btn primary" data-act="newItem">+ پہلی چیز شامل کریں</button>`:""}</div>`}</section>`;
 }
 
@@ -437,6 +463,34 @@ function sheetCustForm(c){
     ${!c.id?`<div class="fld"><label for="cOpen">پرانا بقایا (اگر ہو) — گاہک سے لینے ہیں / سپلائر کو دینے ہیں</label><input id="cOpen" name="opening" class="num" inputmode="decimal" placeholder="0"></div>`:""}
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
 }
+/* ---------- QR codes and PDF documents ---------- */
+const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 14h6M9 18h4"/></svg>';
+const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
+function billQrText(s,purchase){return `WB-${purchase?"P":"S"}:${s.id}\n${shopTitle()}\n${purchase?"خریداری":"بل"} #${s.no}\n${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||"نقد"}\nکل: Rs ${Math.round(s.total)}\nنقد: Rs ${Math.round(s.paid)}${s.total>s.paid?"\nادھار: Rs "+Math.round(s.total-s.paid):""}`}
+function ledgerQrText(c,v){return `WB-C:${c.id}\n${shopTitle()}\n${c.kind==="supplier"?"سپلائر":"گاہک"}: ${c.name}\n${c.phone||""}\n${v>0?"لینے ہیں":v<0?"دینے ہیں":"حساب برابر"}: Rs ${Math.round(Math.abs(v))}\n${new Date().toLocaleDateString("en-GB")}`}
+const pdfHead=(title,sub)=>`<div class="pd-head"><img src="logo.png" alt=""><div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-tag">Care Your Dreams</div></div><div class="pd-title"><b>${title}</b><span>${sub}</span></div></div>`;
+async function billPdf(s,purchase){
+  const qr=await qrDataUrl(billQrText(s,purchase),260);
+  const html=`${pdfHead(purchase?"خریداری کا بل":"فروخت کا بل","#"+esc(s.no)+" · "+new Date(s.date).toLocaleDateString("en-GB")+" "+new Date(s.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}))}
+    <div class="pd-party"><div><span>${purchase?"سپلائر":"گاہک"}</span><b>${esc(s.custName||s.suppName||(purchase?"نقد خریداری":"کاؤنٹر گاہک"))}</b></div><div><span>برانچ</span><b>${esc(branchName(s.branch))}</b></div>${s.byName?`<div><span>بنانے والا</span><b>${esc(s.byName)}</b></div>`:""}</div>
+    <table class="pd-tbl"><thead><tr><th>#</th><th>چیز</th><th>تعداد</th><th>ریٹ</th><th>رقم</th></tr></thead><tbody>
+    ${(s.lines||[]).map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l.name)}</td><td>${fq(l.qty)} ${esc(l.unit||"")}</td><td>${fq(l.price)}</td><td>${fq(l.qty*l.price)}</td></tr>`).join("")}</tbody></table>
+    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div><span>کل رقم</span><b>${fmt(s.total)}</b></div><div><span>نقد</span><b>${fmt(s.paid)}</b></div>${s.total>s.paid?`<div class="due"><span>ادھار (کھاتے میں)</span><b>${fmt(s.total-s.paid)}</b></div>`:""}</div></div>
+    <p class="pd-thanks">خریداری کا شکریہ</p>`;
+  return await htmlToPdf(html,(purchase?"purchase-":"bill-")+s.no+".pdf");
+}
+async function ledgerPdf(c){
+  const es=S.entries.filter(e=>e.cust===c.id).sort((a,b)=>a.date-b.date);let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}});
+  const sup=c.kind==="supplier",qr=await qrDataUrl(ledgerQrText(c,run),260);
+  const html=`${pdfHead("کھاتے کی تفصیل",new Date().toLocaleDateString("en-GB"))}
+    <div class="pd-party"><div><span>${sup?"سپلائر":"گاہک"}</span><b>${esc(c.name)}</b></div><div><span>فون</span><b dir="ltr">${esc(c.phone||"—")}</b></div><div><span>برانچ</span><b>${esc(branchName(c.branch))}</b></div></div>
+    <table class="pd-tbl"><thead><tr><th>تاریخ</th><th>تفصیل</th><th>${sup?"ادائیگی":"دیے"} (+)</th><th>${sup?"مال آیا":"ملے"} (−)</th><th>بقایا</th></tr></thead><tbody>
+    ${rows.map(e=>`<tr><td>${new Date(e.date).toLocaleDateString("en-GB")}</td><td>${esc(e.note||"")}</td><td>${e.type==="gave"?fq(e.amount):""}</td><td>${e.type==="got"?fq(e.amount):""}</td><td>${fq(e.run)}</td></tr>`).join("")||`<tr><td colspan="5">کوئی اندراج نہیں</td></tr>`}</tbody></table>
+    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div class="${run>0?"due":""}"><span>${run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}</span><b>${fmt(Math.abs(run))}</b></div></div></div>`;
+  return await htmlToPdf(html,"khata-"+(c.name||"").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,30)+".pdf");
+}
+async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerHTML;btn.textContent="بن رہی ہے…"}try{const r=await fn();if(typeof r==="string"&&r.startsWith("Documents"))toast("فائل فون میں محفوظ: "+r);else if(r!=="cancelled")toast("فائل تیار")}catch(e){console.error(e);toast("فائل نہیں بن سکی: "+(e&&e.message||e))}finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.lbl}}}
+
 /* ---------- WhatsApp ---------- */
 const shopLine=()=>S.shopName?"\n— "+S.shopName:"";
 function waReminder(c,v){
@@ -469,7 +523,11 @@ function sheetCust(id){
    <div class="bal-box ${v>0?"owe":v<0?"pay":"zero"}"><div><div class="note">${v>0?"آپ نے لینے ہیں":v<0?"آپ نے دینے ہیں":"حساب برابر ہے"}</div><div class="v ${v>0?"c-owe":v<0?"c-pay":""}">${fmt(Math.abs(v))}</div></div>
      <div class="note"><span class="num">${esc(c.phone||"")}</span><br>${esc(branchName(c.branch))}</div></div>
    ${S.canWrite?(c.kind==="supplier"?`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادائیگی کی</button><button class="btn pay" data-entry="got">مال خریدا (ادھار)</button></div>`:`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادھار دیا / مال دیا</button><button class="btn pay" data-entry="got">رقم ملی</button></div>`):""}
-   ${(()=>{const pe=[...es].reverse().find(x=>(x.att||[]).length);return pe?`<button class="latest-bill" data-entv-btn="${esc(pe.id)}">${CLIP_ICON}<span>تازہ بل کی تصویر · <span class="num">${dstr(pe.date)}</span> · ${esc(pe.note||fmt(pe.amount))}</span><b>دیکھیں</b></button>`:""})()}
+   ${(()=>{const pe=[...es].reverse().find(x=>(x.att||[]).length),last=es[es.length-1];
+     return `<div class="photo-card"><div class="pc-head">${CAM_ICON}<b>بل کی تصویر</b>${pe?`<span class="note"><span class="num">${dstr(pe.date)}</span></span>`:""}</div>
+       ${pe?`<button class="pc-thumb" data-entv-btn="${esc(pe.id)}" id="pcThumb" data-att-thumb="${esc(pe.att[0])}"><span class="note">تصویر لوڈ ہو رہی ہے…</span></button>`:`<p class="note" style="margin:0">${last?"اس کھاتے میں ابھی کوئی تصویر نہیں۔ نیچے سے کیمرے یا گیلری سے لگائیں، یہ آخری اندراج کے ساتھ لگے گی۔":"پہلے کوئی اندراج کریں، پھر اس کے ساتھ بل کی تصویر لگا سکتے ہیں۔"}</p>`}
+       ${S.canWrite&&last?`<div class="pc-btns"><label class="btn primary" for="ledCam">${CAM_ICON} کیمرے سے تصویر</label><label class="btn" for="ledGal">${GAL_ICON} گیلری سے</label></div>
+       <input type="file" id="ledCam" accept="image/*" capture="environment" hidden data-ent="${esc(last.id)}"><input type="file" id="ledGal" accept="image/*" hidden data-ent="${esc(last.id)}">`:""}</div>`})()}
    <div id="entryForm"></div>
    <div class="chips" style="margin:12px 0">
      ${waButtons(c.phone,[[c.kind==="supplier"?"حساب کا پیغام":"بقایا یاددہانی","remind"],["پورا کھاتہ بھیجیں","stmt"]])}
@@ -478,8 +536,11 @@ function sheetCust(id){
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
    ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
+   <div class="qr-row" id="custQr"></div>
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
+  const th=$("#pcThumb");if(th){const aid=th.dataset.attThumb;(ATT[aid]?Promise.resolve(ATT[aid]):getAttachment(aid).then(d=>ATT[aid]=d)).then(d=>{if(d&&d.data&&$("#pcThumb"))$("#pcThumb").innerHTML=`<img src="${d.data}" alt="تازہ بل کی تصویر"><span class="pc-open">بڑی کر کے دیکھیں</span>`}).catch(()=>{if($("#pcThumb"))$("#pcThumb").innerHTML=`<span class="note">انٹرنیٹ کے بغیر تصویر نہیں کھل سکتی</span>`})}
+  qrDataUrl(ledgerQrText(c,v)).then(u=>{const q=$("#custQr");if(q)q.innerHTML=`<img src="${u}" alt="کھاتے کا QR کوڈ" width="96" height="96"><div><b>کھاتے کا QR کوڈ</b><div class="note">اس میں گاہک کا نام، نمبر اور بقایا ہے۔</div>${S.canWrite||true?`<button class="btn sm" data-ledpdf="${esc(c.id)}">${PDF_ICON} کھاتہ PDF</button>`:""}</div>`});
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -490,17 +551,39 @@ function entryFormHtml(type){
     ${S.entries.some(x=>x.cust===S.openCust&&(x.att||[]).length)?`<p class="note" style="margin:0">نئی تصویر لگانے سے اس کھاتے کی پرانی بل والی تصویر ہٹ جائے گی۔</p>`:""}
     <div class="actions"><button type="button" class="btn" data-cancelentry>منسوخ</button><button class="btn ${type==="gave"?"owe":"pay"}">محفوظ کریں</button></div></form>`;
 }
+const UNITS=["عدد","درجن","ڈبی","ڈبہ","پیکٹ","کلو","گرام","لیٹر","کوارٹر","گیلن","ڈرمی","فٹ","گز","میٹر","رول","بیگ","سیٹ","جوڑا","بنڈل","شیٹ","ٹن"];
+const unitSelect=(id,val)=>{const known=UNITS.includes(val);return `<select id="${id}Sel" data-unitsel="${id}">${UNITS.map(u=>`<option ${u===val?"selected":""}>${u}</option>`).join("")}<option value="__other" ${val&&!known?"selected":""}>دیگر (خود لکھیں)</option></select><input id="${id}Other" placeholder="یونٹ کا نام" value="${val&&!known?esc(val):""}" ${val&&!known?"":"hidden"} style="margin-top:6px">`};
+const unitVal=id=>{const v=($("#"+id+"Sel")||{}).value;return v==="__other"?(($("#"+id+"Other")||{}).value||"").trim()||"عدد":v};
 function sheetItemForm(it){
-  it=it||{};
+  it=it||{};const unit=it.unit||"عدد",per=Number(it.per)||1,diff=!!(it.buyUnit&&it.buyUnit!==unit&&per!==1)||(it.buyUnit&&it.buyUnit!==unit),buyUnit=it.buyUnit||"ڈبی";
+  const buyCost=it.buyCost??(it.cost!=null?Math.round(Number(it.cost)*per*100)/100:"");
   openSheet(it.id?"چیز میں ترمیم":"نئی چیز",`<form class="f" data-form="item" data-id="${esc(it.id||"")}">
     <div class="fld"><label for="iName">نام</label><input id="iName" name="name" required value="${esc(it.name||"")}" placeholder="مثلاً PVC پائپ ½ انچ"></div>
-    <div class="two"><div class="fld"><label for="iCat">قسم</label><input id="iCat" name="cat" list="catList" value="${esc(it.cat||"")}" placeholder="پلمبنگ، الیکٹرک، پینٹ…"><datalist id="catList">${[...new Set(S.items.map(x=>x.cat).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
-    <div class="fld"><label for="iUnit">یونٹ</label><input id="iUnit" name="unit" list="unitList" value="${esc(it.unit||"عدد")}"><datalist id="unitList"><option value="عدد"><option value="فٹ"><option value="میٹر"><option value="کلو"><option value="لیٹر"><option value="بیگ"><option value="درجن"><option value="ڈبہ"><option value="رول"></datalist></div></div>
-    <div class="two"><div class="fld"><label for="iCost">خرید ریٹ</label><input id="iCost" name="cost" class="num" inputmode="decimal" value="${esc(it.cost??"")}"></div>
-    <div class="fld"><label for="iSale">فروخت ریٹ</label><input id="iSale" name="sale" class="num" inputmode="decimal" required value="${esc(it.sale??"")}"></div></div>
-    <div class="two"><div class="fld"><label for="iMin">کم از کم اسٹاک (الرٹ)</label><input id="iMin" name="min" class="num" inputmode="decimal" value="${esc(it.min??"")}"></div>
-    ${!it.id?`<div class="fld"><label for="iOpen">موجودہ اسٹاک (${esc(branchName(defBranch()))})</label><input id="iOpen" name="open" class="num" inputmode="decimal" placeholder="0"></div>`:"<div></div>"}</div>
+    <div class="fld"><label for="iCat">قسم</label><input id="iCat" name="cat" list="catList" value="${esc(it.cat||"")}" placeholder="پلمبنگ، الیکٹرک، پینٹ…"><datalist id="catList">${[...new Set(S.items.map(x=>x.cat).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist></div>
+    <div class="fld"><label for="iUnitSel">فروخت کا یونٹ (اسٹاک اسی میں گنا جائے گا)</label>${unitSelect("iUnit",unit)}</div>
+    <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="iDiff" ${diff?"checked":""}> خریداری کسی اور یونٹ میں ہوتی ہے (مثلاً خریدی ڈبی میں، بیچی درجن میں)</label>
+    <div class="buy-box" id="buyBox" ${diff?"":"hidden"}>
+      <div class="two"><div class="fld"><label for="iBuySel">خرید کا یونٹ</label>${unitSelect("iBuy",buyUnit)}</div>
+      <div class="fld"><label for="iPer" id="iPerLbl">ایک ${esc(buyUnit)} میں کتنے ${esc(unit)}؟</label><input id="iPer" name="per" class="num" inputmode="decimal" value="${diff?per:""}" placeholder="مثلاً 12"></div></div>
+      <p class="note" id="iConv" style="margin:0"></p>
+    </div>
+    <div class="two"><div class="fld"><label for="iCost" id="iCostLbl">خرید ریٹ (فی ${esc(diff?buyUnit:unit)})</label><input id="iCost" name="cost" class="num" inputmode="decimal" value="${esc(buyCost)}"></div>
+    <div class="fld"><label for="iSale" id="iSaleLbl">فروخت ریٹ (فی ${esc(unit)})</label><input id="iSale" name="sale" class="num" inputmode="decimal" required value="${esc(it.sale??"")}"></div></div>
+    <div class="two"><div class="fld"><label for="iMin" id="iMinLbl">کم از کم اسٹاک (${esc(unit)})</label><input id="iMin" name="min" class="num" inputmode="decimal" value="${esc(it.min??"")}"></div>
+    ${!it.id?`<div class="fld"><label for="iOpen" id="iOpenLbl">موجودہ اسٹاک (${esc(unit)}، ${esc(branchName(defBranch()))})</label><input id="iOpen" name="open" class="num" inputmode="decimal" placeholder="0"></div>`:"<div></div>"}</div>
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
+  syncItemForm();
+}
+function syncItemForm(){
+  if(!$("#iUnitSel"))return;
+  for(const id of ["iUnit","iBuy"]){const o=$("#"+id+"Other"),sel=$("#"+id+"Sel");if(o&&sel)o.hidden=sel.value!=="__other"}
+  const u=unitVal("iUnit"),diff=$("#iDiff").checked,bu=unitVal("iBuy"),per=num(($("#iPer")||{}).value)||0;
+  $("#buyBox").hidden=!diff;
+  const set=(id,t)=>{const el=$("#"+id);if(el)el.textContent=t};
+  set("iPerLbl",`ایک ${bu} میں کتنے ${u}؟`);set("iCostLbl",`خرید ریٹ (فی ${diff?bu:u})`);set("iSaleLbl",`فروخت ریٹ (فی ${u})`);set("iMinLbl",`کم از کم اسٹاک (${u})`);
+  const ol=$("#iOpenLbl");if(ol)ol.textContent=ol.textContent.replace(/\(([^،]*)،/,`(${u}،`);
+  const c=num(($("#iCost")||{}).value);
+  set("iConv",diff&&per>0?`1 ${bu} = ${fq(per)} ${u}${c?` · ایک ${u} کی لاگت ≈ Rs ${fq(Math.round(c/per*100)/100)}`:""}`:"");
 }
 function sheetItem(id){
   const it=S.items.find(x=>x.id===id);if(!it)return;S.openItem=id;
@@ -532,7 +615,9 @@ function sheetSale(id){
    <tr><td colspan="3"><strong>کل</strong></td><td class="n num"><strong>${fq(s.total)}</strong></td></tr>
    <tr><td colspan="3">نقد وصول</td><td class="n num">${fq(s.paid)}</td></tr>
    ${s.total>s.paid?`<tr><td colspan="3" class="c-owe">کھاتے میں ادھار</td><td class="n num c-owe">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
-   <div class="actions" style="margin-top:12px">${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+   <div class="qr-row" id="billQr"></div>
+   <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+  qrDataUrl(billQrText(s)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="بل کا QR کوڈ" width="96" height="96"><div><b>بل کا QR کوڈ</b><div class="note">اسکین کرنے پر بل نمبر، تاریخ، گاہک اور رقم نظر آتی ہے۔</div></div>`});
 }
 
 function sheetPurchase(id){
@@ -543,7 +628,9 @@ function sheetPurchase(id){
    <tr><td colspan="3"><strong>کل</strong></td><td class="n num"><strong>${fq(s.total)}</strong></td></tr>
    <tr><td colspan="3">نقد ادا کیا</td><td class="n num">${fq(s.paid)}</td></tr>
    ${s.total>s.paid?`<tr><td colspan="3" class="c-pay">سپلائر کے دینے ہیں</td><td class="n num c-pay">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
-   <div class="actions" style="margin-top:12px">${(()=>{const c=S.customers.find(x=>x.id===s.supp);WA={bill:[c&&c.phone,waBill(s,true)]};return c&&c.phone?waButtons(c.phone,[["سپلائر کو واٹس ایپ پر بھیجیں","bill"]]):""})()}</div>`);
+   <div class="qr-row" id="billQr"></div>
+   <div class="actions" style="margin-top:12px"><button class="btn primary" data-purpdf="${esc(s.id)}">${PDF_ICON} PDF</button>${(()=>{const c=S.customers.find(x=>x.id===s.supp);WA={bill:[c&&c.phone,waBill(s,true)]};return c&&c.phone?waButtons(c.phone,[["سپلائر کو واٹس ایپ پر بھیجیں","bill"]]):""})()}</div>`);
+  qrDataUrl(billQrText(s,true)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="QR کوڈ" width="96" height="96"><div><b>خریداری کا QR کوڈ</b></div>`});
 }
 const CATS={in:[["پرانا مال / کباڑ فروخت",1],["کمیشن",1],["کرایہ ملا",1],["متفرق آمدنی",1],["مالک نے رقم ڈالی",0],["بینک سے نکالی",0],["قرض ملا",0]],
   out:[["بجلی کا بل",1],["دکان کا کرایہ",1],["تنخواہ",1],["چائے پانی",1],["گاڑی کرایہ / لوڈنگ",1],["مرمت",1],["متفرق",1],["مالک نے رقم نکالی",0],["بینک میں جمع",0],["قرض واپس کیا",0]]};
@@ -598,6 +685,12 @@ function replaceOldPhotos(custId,keepId){
     if(S.isAdmin)for(const a of e.att){deleteAttachment(a);delete ATT[a]}
     db.update("entries",e.id,{att:[]});
   }
+}
+async function ledgerPhoto(entId,file){
+  const e=S.entries.find(x=>x.id===entId);if(!e)return;
+  try{S.photos=[await compressImage(file)]}catch(x){toast("یہ تصویر نہیں کھل سکی");return}
+  const att=savePhotos({kind:"entry",ref:entId});
+  if(await w(()=>db.update("entries",entId,{att}))){replaceOldPhotos(e.cust,entId);toast("بل کی تصویر محفوظ");sheetCust(e.cust)}
 }
 function sheetEntryView(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return;const c=S.customers.find(x=>x.id===e.cust)||{},sup=c.kind==="supplier",att=e.att||[];
@@ -702,7 +795,9 @@ document.addEventListener("submit",async ev=>{
     if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
   }
   if(kind==="item"){
-    const body={name:d.name.trim(),cat:d.cat.trim(),unit:d.unit.trim(),cost:num(d.cost),sale:num(d.sale),min:num(d.min)};
+    const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,per=diff?(num(d.per)||1):1,buyCost=num(d.cost);
+    if(diff&&!(num(d.per)>0)){toast("بتائیں کہ ایک "+buyUnit+" میں کتنے "+unit+" ہیں");if(btn)btn.disabled=false;return}
+    const body={name:d.name.trim(),cat:d.cat.trim(),unit,buyUnit,per,buyCost,cost:Math.round(buyCost/per*10000)/10000,sale:num(d.sale),min:num(d.min)};
     if(id)ok=await w(()=>db.update("items",id,body));
     else{const b=defBranch();ok=await w(()=>db.add("items",{...body,stock:b?{[b]:num(d.open)}:{},createdAt:Date.now()}))}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
@@ -765,7 +860,7 @@ async function saveSale(){
 
 async function savePurchase(){
   const bid=S.branch!=="all"?S.branch:(S.branches[0]||{}).id;
-  const lines=S.pcart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,unit:l.unit||""}));
+  const lines=S.pcart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,unit:l.unit||"",per:l.per||1}));
   if(!lines.length)return;
   const total=lines.reduce((a,l)=>a+l.qty*l.price,0);
   const {paid,due}=payCalc("purchase",total);
@@ -777,7 +872,7 @@ async function savePurchase(){
   const ref={id:newId("purchases")},ops=[{op:"set",col:"purchases",id:ref.id,data:{no,branch:bid,supp:sup?sup.id:null,suppName:sup?sup.name:"",lines,total,paid,date:Date.now(),...by()}}];
   if(toLedger){const t=Date.now();ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:total,note:"خریداری #"+no+" (مال آیا)",date:t,branch:bid,...by(),purchase:ref.id}});
     if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خریداری #"+no+" (نقد ادا)",date:t+1,branch:bid,...by(),purchase:ref.id}});}
-  for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:l.qty,extra:S.updCost&&l.price>0?{cost:l.price}:{}});
+  for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:Math.round(l.qty*(l.per||1)*1000)/1000,extra:S.updCost&&l.price>0?{cost:Math.round(l.price/(l.per||1)*10000)/10000,buyCost:l.price}:{}});
   const ok=await w(()=>db.batch(ops));
   if(!ok){if(btn)btn.disabled=false;return}
   S.pcart=[];S.pSupp="";S.pPaid="";S.pMode="cash";render();toast("خریداری #"+no+" محفوظ");sheetPurchase(ref.id);
@@ -800,6 +895,10 @@ document.addEventListener("click",async ev=>{
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
   if(ds.backcust){sheetCust(ds.backcust);return}
+  if(ds.billpdf){const x=S.sales.find(v=>v.id===ds.billpdf);if(x)busy(t,()=>billPdf(x));return}
+  if(ds.purpdf){const x=S.purchases.find(v=>v.id===ds.purpdf);if(x)busy(t,()=>billPdf(x,true));return}
+  if(ds.ledpdf){const x=S.customers.find(v=>v.id===ds.ledpdf);if(x)busy(t,()=>ledgerPdf(x));return}
+  if(ds.rep){const R=S.lastReport||reportData();busy(t,()=>ds.rep==="xlsx"?sheetsToXlsx(reportSheets(R),"report-"+todayStr()+".xlsx"):reportPdf(R));return}
   if(ds.entvBtn){sheetEntryView(ds.entvBtn);return}
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
@@ -868,6 +967,7 @@ document.addEventListener("input",e=>{
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
   if(t.id==="xCat")syncCat();
+  if(["iPer","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
 });
 document.addEventListener("change",e=>{
   const t=e.target;
@@ -875,13 +975,15 @@ document.addEventListener("change",e=>{
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.dataset.unitsel||t.id==="iDiff")syncItemForm();
   if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
   if(t.id==="pLedger"){S.pLedger=t.checked;updPTotal()}
   if(t.id==="cashDate"){S.cashDate=t.value;render()}
   if(t.id==="rFrom"){S.rFrom=t.value;render()}
   if(t.id==="rTo"){S.rTo=t.value;render()}
-  if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.cost)||0,unit:it.unit});render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*(Number(it.per)||1)*100)/100,unit:it.buyUnit||it.unit,per:Number(it.per)||1,sunit:it.unit});render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
   if((t.id==="camIn"||t.id==="galIn")&&t.files&&t.files.length){addPhotos([...t.files]);t.value=""}
+  if((t.id==="ledCam"||t.id==="ledGal")&&t.files&&t.files[0]){ledgerPhoto(t.dataset.ent,t.files[0]);t.value=""}
   if(t.id==="vcfIn"&&t.files&&t.files[0]){const r=new FileReader();r.onload=()=>{const list=parseVcf(String(r.result||""));if(!list.length){toast("اس فائل میں کوئی نمبر نہیں ملا");return}S.contacts=list;renderContactBox("")};r.readAsText(t.files[0]);t.value=""}
 });
 function updTotal(){
@@ -893,6 +995,7 @@ function updTotal(){
 
 window.addEventListener("wb:refreshCust",()=>{if(S.openCust)sheetCust(S.openCust)});
 if(!isNative&&"serviceWorker" in navigator&&location.protocol==="https:")navigator.serviceWorker.register("sw.js").catch(()=>{});
+initStatusBar();
 /* ---------- boot ---------- */
 import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile}));
 export {S};

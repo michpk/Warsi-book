@@ -2,5 +2,16 @@
   "appId": "com.warsi.book",
   "appName": "وارثی بک",
   "webDir": "dist",
-  "android": { "allowMixedContent": false }
+  "android": {
+    "allowMixedContent": false,
+    "adjustMarginsForEdgeToEdge": "force"
+  },
+  "backgroundColor": "#0a5444",
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false,
+      "backgroundColor": "#0a5444",
+      "style": "DARK"
+    }
+  }
 }
