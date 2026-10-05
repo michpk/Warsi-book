@@ -1,5 +1,6 @@
 // Sign-in screens, roles, team management, data import. Runs once main.js has loaded.
 import { configured, list } from "./data.js";
+import { createLock } from "./lock.js";
 
 export function boot(ctx) {
   const { S, me, render, toast, $, esc, db, startSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } = ctx;
@@ -7,6 +8,15 @@ export function boot(ctx) {
   const show = html => { authEl.innerHTML = `<div class="auth-card">${html}</div>`; authEl.hidden = false; };
   const hide = () => { authEl.hidden = true; authEl.innerHTML = ""; };
   const ROLE = { owner: "مالک", manager: "مینیجر", staff: "ملازم", pending: "منظوری باقی", disabled: "بند" };
+  const EYE = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const EYE_OFF = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 3l18 18M10.6 5.1A10.7 10.7 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-3.2 4.2M6.6 6.6C3.9 8.4 2 12 2 12s3.5 7 10 7a10 10 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>';
+  document.addEventListener("click", ev => {
+    const b = ev.target.closest("[data-eye]"); if (!b) return;
+    const inp = b.parentElement.querySelector("input"); const show = inp.type === "password";
+    inp.type = show ? "text" : "password"; b.innerHTML = show ? EYE_OFF : EYE; b.setAttribute("aria-pressed", show); b.setAttribute("aria-label", show ? "پاس ورڈ چھپائیں" : "پاس ورڈ دکھائیں"); inp.focus();
+  });
+  const lock = createLock({ onForgot: () => { lock.reset(); authApi.signOut(); } });
+  let unlockedFor = null;
   const brand = `<img class="auth-logo" src="logo.png" alt="Warsi Hardware"><div class="auth-brand">وارثی بک</div><p class="auth-tag">Care Your Dreams</p>`;
 
   if (!configured) {
@@ -27,7 +37,7 @@ export function boot(ctx) {
       <form class="f" id="authForm">
         ${mode === "up" ? `<div class="fld"><label for="aName">آپ کا نام</label><input id="aName" name="name" required autocomplete="name"></div>` : ""}
         <div class="fld"><label for="aEmail">ای میل</label><input id="aEmail" name="email" type="email" required autocomplete="email" dir="ltr"></div>
-        <div class="fld"><label for="aPass">پاس ورڈ ${mode === "up" ? "(کم از کم 6 حروف)" : ""}</label><input id="aPass" name="pass" type="password" required minlength="6" autocomplete="${mode === "up" ? "new-password" : "current-password"}" dir="ltr"></div>
+        <div class="fld"><label for="aPass">پاس ورڈ ${mode === "up" ? "(کم از کم 6 حروف)" : ""}</label><div class="pw-wrap"><input id="aPass" name="pass" type="password" required minlength="6" autocomplete="${mode === "up" ? "new-password" : "current-password"}" dir="ltr"><button type="button" class="pw-eye" data-eye aria-label="پاس ورڈ دکھائیں" aria-pressed="false">${EYE}</button></div></div>
         ${msg ? `<div class="note" style="color:var(--owe)">${esc(msg)}</div>` : ""}
         <button class="btn primary" style="justify-content:center">${mode === "up" ? "اکاؤنٹ بنائیں" : "لاگ اِن"}</button>
         ${mode === "in" ? `<button type="button" class="btn ghost sm" data-am="reset">پاس ورڈ بھول گئے؟</button>` : `<p class="note">نیا اکاؤنٹ بنانے کے بعد مالک کی منظوری سے رسائی ملے گی۔</p>`}
@@ -96,7 +106,7 @@ export function boot(ctx) {
   authApi.onUser(async u => {
     if (unMe) { unMe(); unMe = null; }
     curUser = u;
-    if (!u) { started = false; mode = "in"; loginScreen(); return; }
+    if (!u) { unlockedFor = null; lock.stop(); started = false; mode = "in"; loginScreen(); return; }
     me.uid = u.uid; me.name = u.displayName || me.pendingName || u.email;
     show(`${brand}<p class="note">لوڈ ہو رہا ہے…</p>`);
     unMe = watchMe(u.uid, async prof => {
@@ -120,11 +130,13 @@ export function boot(ctx) {
         startSync(onData, { users: S.isAdmin });
       }
       hide(); render();
+      if (unlockedFor !== u.uid) { unlockedFor = u.uid; lock.require(u.uid); }
     });
   });
 
   /* ----- team, account and import, shown on the branches tab ----- */
   S.after = () => {
+    setTimeout(() => lock.hasBio().then(ok => { const r = document.getElementById("bioRow"); if (r) r.style.display = ok ? "flex" : "none"; }), 0);
     const box = document.getElementById("teamBox"); if (!box) return;
     const users = (S.users || []).slice().sort((a, b) => (a.role === "pending" ? -1 : 0) - (b.role === "pending" ? -1 : 0) || (a.name || "").localeCompare(b.name || ""));
     const pend = users.filter(x => x.role === "pending").length;
@@ -141,7 +153,12 @@ export function boot(ctx) {
         ${x.role === "pending" ? `<button class="btn pay sm" data-approve="${esc(x.id)}">منظور کریں</button>` : ""}${roleSel(x)}${x.role !== "owner" && S.branches.length > 1 ? brSel(x) : ""}</div>`).join("")}</div>` : `<div class="empty">ابھی کوئی ملازم نہیں۔</div>`}
       <p class="note pad" style="margin:0">ملازم کو ایپ یا ویب سائٹ کا لنک دیں۔ وہ "نیا اکاؤنٹ" سے رجسٹر کرے، پھر یہاں اسے منظور کریں۔ <b>ملازم</b> بل، کھاتے اور اسٹاک درج کر سکتا ہے۔ <b>مینیجر</b> برانچیں، ملازمین اور اندراج حذف بھی کر سکتا ہے۔</p></section>` : ""}
     <section class="card"><div class="card-h"><h3>میرا اکاؤنٹ</h3><span class="pill">${ROLE[me.role] || ""}</span></div>
-      <div class="pad" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="main" style="flex:1;min-width:0"><strong>${esc(me.name)}</strong><div class="note" dir="ltr" style="text-align:right">${esc((curUser || {}).email || "")}</div></div><button class="btn" data-auth2="out">لاگ آؤٹ</button></div></section>
+      <div class="pad" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="main" style="flex:1;min-width:0"><strong>${esc(me.name)}</strong><div class="note" dir="ltr" style="text-align:right">${esc((curUser || {}).email || "")}</div></div><button class="btn" data-auth2="out">لاگ آؤٹ</button></div>
+      <div class="pad" style="border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1">ایپ لاک (PIN)</span><button class="btn sm" data-auth2="pin">PIN بدلیں</button></div>
+        <label id="bioRow" style="display:none;align-items:center;gap:10px"><input type="checkbox" id="bioTog" ${lock.bioEnabled() ? "checked" : ""}> فنگر پرنٹ / چہرے سے کھولیں</label>
+        <p class="note" style="margin:0">ایپ کھولنے پر اور ایک منٹ سے زیادہ بند رہنے کے بعد PIN یا فنگر پرنٹ مانگا جاتا ہے۔ PIN صرف اسی فون میں رہتا ہے۔</p>
+      </div></section>
     ${S.isOwner ? `<section class="card pad" style="display:flex;flex-direction:column;gap:8px"><h3 style="margin:0;font-size:15px">پرانی وارثی بک سے ڈیٹا لائیں</h3>
       <p class="note" style="margin:0">پرانی وارثی بک (Claude والی) میں "برانچیں" کے صفحے سے "سارا ڈیٹا فائل میں" دبا کر فائل بنائیں، پھر یہاں چنیں۔ یہ کام صرف ایک بار کریں۔</p>
       <label class="btn sm" for="impFile" style="align-self:flex-start;cursor:pointer">فائل چنیں (.json)</label><input type="file" id="impFile" accept=".json,application/json" hidden><div id="impMsg"></div></section>` : ""}`;
@@ -151,6 +168,7 @@ export function boot(ctx) {
     const t = ev.target.closest("[data-approve],[data-auth2],[data-impgo]"); if (!t) return;
     if (t.dataset.approve) { setRole(t.dataset.approve, "staff"); toast("منظور ہو گیا"); }
     if (t.dataset.auth2 === "out") authApi.signOut();
+    if (t.dataset.auth2 === "pin") { await lock.changePin(); toast("نیا PIN محفوظ"); }
     if (t.dataset.impgo !== undefined && pendingImport) {
       t.disabled = true; const msg = $("#impMsg");
       try { await db.importAll(pendingImport, (n, tot) => { msg.textContent = `${n} / ${tot} محفوظ ہوئے…`; }); msg.innerHTML = `<span class="c-pay">ڈیٹا آ گیا۔</span>`; toast("پرانا ڈیٹا آ گیا"); }
@@ -161,6 +179,7 @@ export function boot(ctx) {
   document.addEventListener("change", ev => {
     const t = ev.target;
     if (t.dataset.role) setRole(t.dataset.role, t.value);
+    if (t.id === "bioTog") lock.setBio(t.checked).then(ok => { if (!ok) { t.checked = false; toast("فنگر پرنٹ کی تصدیق نہیں ہوئی"); } else toast(t.checked ? "فنگر پرنٹ چالو" : "فنگر پرنٹ بند"); });
     if (t.dataset.ubranch !== undefined && t.dataset.ubranch) db.update("users", t.dataset.ubranch, { branch: t.value });
     if (t.id === "impFile" && t.files && t.files[0]) {
       const r = new FileReader();

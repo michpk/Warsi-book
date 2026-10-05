@@ -42,9 +42,11 @@ function cashFlow(from,to){
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.amount,exp:x.id,att:(x.att||[]).length};if(x.dir==="in")inR.push({...r,label:"آمد · "+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.amount,exp:x.id,att:(x.att||[]).length};if(x.dir==="in")inR.push({...r,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")})}
   return {inR,out};
 }
+/* bills + any manual income the shop chose to count as a sale */
+const allSales=()=>S.sales.concat(S.expenses.filter(x=>x.dir==="in"&&x.sale).map(x=>({id:x.id,no:"دستی",date:x.date,branch:x.branch,custName:expCat(x),total:Number(x.amount)||0,paid:Number(x.amount)||0,lines:[],manual:true})));
 const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s).reduce((a,v)=>a+(Number(v)||0),0);return Number(s[b])||0};
 
 /* ---------- render shell ---------- */
@@ -75,7 +77,7 @@ function vHome(){
   const bal=balances(),custs=S.customers.filter(inBranch);
   let recv=0,payb=0;for(const c of custs){const v=bal[c.id]||0;if(v>0)recv+=v;else payb-=v}
   const t0=dayStart(),m0=monthStart();
-  const sales=S.sales.filter(inBranch);
+  const sales=allSales().filter(inBranch);
   const today=sales.filter(s=>s.date>=t0),month=sales.filter(s=>s.date>=m0);
   const sum=(a,f)=>a.reduce((x,y)=>x+(Number(f(y))||0),0);
   const cashToday=sumA(cashFlow(t0,t0+864e5).inR);
@@ -241,7 +243,7 @@ function rRange(){
 const expCat=x=>String(x.note||"متفرق").split(" · ")[0]||"متفرق";
 function reportData(){
   const [from,to,label]=rRange(),inR=x=>inBranch(x)&&x.date>=from&&x.date<to;
-  const sales=S.sales.filter(inR),purch=S.purchases.filter(inR),allX=S.expenses.filter(inR),exps=allX.filter(x=>x.dir!=="in"&&x.pl!==false),incs=allX.filter(x=>x.dir==="in"&&x.pl!==false);
+  const sales=allSales().filter(inR),purch=S.purchases.filter(inR),allX=S.expenses.filter(inR),exps=allX.filter(x=>x.dir!=="in"&&x.pl!==false),incs=allX.filter(x=>x.dir==="in"&&x.pl!==false&&!x.sale);
   const sum=(a,f)=>a.reduce((x,y)=>x+(Number(f(y))||0),0);
   const saleT=sum(sales,s=>s.total),paidT=sum(sales,s=>s.paid);
   const cogs=sum(sales,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty));
@@ -268,7 +270,7 @@ function reportData(){
   const recv=S.customers.filter(c=>inBranch(c)&&(c.kind||"customer")==="customer"&&(bal[c.id]||0)>0).map(c=>({c,v:bal[c.id],last:lastGot[c.id]||0})).sort((a,b)=>b.v-a.v);
   const pay=S.customers.filter(c=>inBranch(c)&&c.kind==="supplier"&&(bal[c.id]||0)<0).map(c=>({c,v:-bal[c.id]})).sort((a,b)=>b.v-a.v);
   // branches
-  const br=S.branches.map(b=>{const bs=S.sales.filter(s=>s.branch===b.id&&s.date>=from&&s.date<to),bxa=S.expenses.filter(x=>x.branch===b.id&&x.date>=from&&x.date<to&&x.pl!==false),bi=sum(bxa.filter(x=>x.dir==="in"),x=>x.amount),bx=bxa.filter(x=>x.dir!=="in");
+  const br=S.branches.map(b=>{const bs=allSales().filter(s=>s.branch===b.id&&s.date>=from&&s.date<to),bxa=S.expenses.filter(x=>x.branch===b.id&&x.date>=from&&x.date<to&&x.pl!==false),bi=sum(bxa.filter(x=>x.dir==="in"),x=>x.amount),bx=bxa.filter(x=>x.dir!=="in");
     const st=sum(bs,s=>s.total),bc=sum(bs,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty)),be=sum(bx,x=>x.amount);return {name:b.name,sales:st,n:bs.length,gross:st-bc,exp:be,net:st-bc-be+bi}});
   return {from,to,label,sales,saleT,paidT,credit:saleT-paidT,cogs,gross:saleT-cogs,expT,incT,net:saleT-cogs-expT+incT,purT,purCredit:purT-sum(purch,p=>p.paid),rec,supPaid,
     series:[...buckets.values()],monthly,items,custSales,expCats,recv,pay,br,nPurch:purch.length};
@@ -709,7 +711,8 @@ function sheetExpView(id){
   openSheet(inc?"آمد کی تفصیل":"خرچے کی تفصیل",`
     <div class="bal-box ${inc?"pay":"owe"}"><div><div class="note">${esc(expCat(x))}</div><div class="v ${inc?"c-pay":"c-owe"}">${fmt(x.amount)}</div></div><div class="note"><span class="num">${dstr(x.date)}</span><br>${esc(branchName(x.branch))}${x.byName?" · "+esc(x.byName):""}</div></div>
     ${String(x.note||"").includes(" · ")?`<p style="margin:10px 0 0">${esc(String(x.note).split(" · ").slice(1).join(" · "))}</p>`:""}
-    ${x.pl===false?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
+    ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
+    ${inc?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
@@ -758,6 +761,7 @@ function sheetExpense(dir="out"){
       <div class="cat-chips" id="catChips">${catList(dir).map(([c,pl,own])=>`<button type="button" class="${own?"own":""}" data-cat="${esc(c)}" data-pl="${pl?1:0}" aria-pressed="false">${esc(c)}</button>`).join("")}</div></div>
     <div class="fld"><label for="xCat">یا نئی قسم لکھیں</label><input id="xCat" name="cat" required placeholder="${inc?"مثلاً پرانی مشین فروخت":"مثلاً موبائل بیلنس"}" autocomplete="off"></div>
     <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> یہ ${inc?"آمدنی":"خرچہ"} منافع کے حساب میں شامل ہو</label>
+    ${inc?`<label class="sale-toggle"><input type="checkbox" id="xSale" name="sale"> <span><b>اسے فروخت میں شمار کریں</b><small>ٹک کریں تو یہ رقم آج کی فروخت، روزانہ فروخت اور رپورٹس میں "فروخت" میں جڑے گی۔ ٹک نہ کریں تو صرف آمد رہے گی۔</small></span></label>`:""}
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
@@ -859,7 +863,7 @@ document.addEventListener("submit",async ev=>{
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=catList(dir).find(([c])=>c===cat);
     const att=savePhotos({kind:"expense"});
-    ok=await w(()=>db.add("expenses",{amount:amt,dir,att,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
+    ok=await w(()=>db.add("expenses",{amount:amt,dir,att,sale:dir==="in"&&!!d.sale,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="addphoto"){
@@ -1020,6 +1024,7 @@ document.addEventListener("change",e=>{
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.dataset.togsale){const id=t.dataset.togsale;w(()=>db.update("expenses",id,{sale:t.checked})).then(ok=>{if(ok){toast(t.checked?"فروخت میں شمار ہو گئی":"فروخت سے نکال دی");sheetExpView(id)}})}
   if(t.dataset.unitsel||t.id==="iDiff")syncItemForm();
   if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
   if(t.id==="pLedger"){S.pLedger=t.checked;updPTotal()}
