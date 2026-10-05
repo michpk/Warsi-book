@@ -70,6 +70,17 @@ test("manager can delete and manage staff but not promote", async () => {
   await assertFails(updateDoc(doc(db, "users/own"), { role: "staff" }));
 });
 
+test("attachments: staff/manager add and read photos; others cannot", async () => {
+  const mg = ctx("mg1", "mgr@test.pk");
+  await assertSucceeds(setDoc(doc(mg, "attachments/a1"), { data: "data:image/jpeg;base64,AAAA", kind: "expense" }));
+  await assertSucceeds(getDoc(doc(mg, "attachments/a1")));
+  await assertFails(updateDoc(doc(mg, "attachments/a1"), { data: "x" }));
+  await assertFails(setDoc(doc(mg, "attachments/a2"), { data: "x".repeat(1000001) }));
+  const pend = ctx("pp1", "p@test.pk");
+  await assertSucceeds(setDoc(doc(pend, "users/pp1"), { role: "pending" }));
+  await assertFails(getDoc(doc(pend, "attachments/a1")));
+});
+
 test("disabled staff loses access", async () => {
   await assertFails(getDoc(doc(ctx("st1", "staff@test.pk"), "items/i1")));
 });

@@ -1,6 +1,6 @@
 import "./style.css";
-import { configured, db, list, newId, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
-import { isNative, saveFile, pickPhoneContact, openWhatsApp } from "./native.js";
+import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
+import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage } from "./native.js";
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -41,7 +41,7 @@ function cashFlow(from,to){
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){if(x.dir==="in")inR.push({date:x.date,amt:x.amount,label:"آمد · "+(x.note||""),exp:x.id});else out.push({date:x.date,amt:x.amount,label:"خرچہ · "+(x.note||""),exp:x.id})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.amount,exp:x.id,att:(x.att||[]).length};if(x.dir==="in")inR.push({...r,label:"آمد · "+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")})}
   return {inR,out};
 }
 const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s).reduce((a,v)=>a+(Number(v)||0),0);return Number(s[b])||0};
@@ -204,7 +204,7 @@ function vCash(){
   const d=S.cashDate||todayStr(),from=new Date(d+"T00:00:00").getTime(),to=from+864e5;
   const prev=cashFlow(0,from),open=sumA(prev.inR)-sumA(prev.out);
   const {inR,out}=cashFlow(from,to),tin=sumA(inR),tout=sumA(out);
-  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row" style="grid-template-columns:minmax(0,1fr) 100px"><div style="min-width:0"><div>${esc(r.label)}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span>${r.exp&&S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delexp="${esc(r.exp)}">حذف</button>`:""}</div><div id="dx_${esc(r.exp||"")}"></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
+  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2><div class="spacer"></div>
     <input type="date" id="cashDate" class="search" style="flex:0 0 auto;min-width:0" value="${d}" aria-label="تاریخ">
@@ -454,10 +454,11 @@ function waBill(s,purchase){
 function waButtons(phone,pairs){
   const ok=String(phone||"").replace(/\D/g,"").length>=10;
   if(!ok)return `<span class="note">واٹس ایپ کے لیے فون نمبر ڈالیں</span>`;
-  return pairs.map(([label,key])=>`<button class="btn sm wa" data-wa="${key}">${WA_ICON}${label}</button>`).join("");
+  return pairs.map(([label,key])=>`<button class="btn sm wa" data-wa="${key}">${WA_ICON}${label}</button><button class="btn sm sms" data-sms="${key}" aria-label="${label} — SMS">${SMS_ICON}SMS</button>`).join("");
 }
 const WA_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3z"/></svg>';
 let WA={};
+const SMS_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 10h8M8 13h5"/></svg>';
 function sheetCust(id){
   const c=S.customers.find(x=>x.id===id);if(!c)return;S.openCust=id;
   const es=S.entries.filter(e=>e.cust===id).sort((a,b)=>a.date-b.date);
@@ -553,8 +554,49 @@ function syncCat(){
   chips.forEach(b=>{const on=b.dataset.cat===v.trim();b.setAttribute("aria-pressed",on);if(on)hit=b});
   const row=$("#plRow"),cb=$("#xPl");if(row)row.hidden=!!hit;if(cb&&hit)cb.checked=hit.dataset.pl==="1";
 }
+/* ---------- bill photos ---------- */
+const CLIP_ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>';
+const MAX_PHOTOS=3;
+function photoPicker(){
+  return `<div class="fld"><span class="lbl-sm">بل یا رسید کی تصویر (اختیاری، زیادہ سے زیادہ ${MAX_PHOTOS})</span>
+    <div class="photo-row" id="photoRow">${photoThumbs()}</div>
+    <div class="chips"><label class="btn sm" for="camIn">${CAM_ICON} کیمرے سے</label><label class="btn sm" for="galIn">${GAL_ICON} گیلری سے</label></div>
+    <input type="file" id="camIn" accept="image/*" capture="environment" hidden><input type="file" id="galIn" accept="image/*" multiple hidden></div>`;
+}
+function photoThumbs(){return (S.photos||[]).map((u,i)=>`<div class="thumb"><img src="${u}" alt="تصویر ${i+1}"><button type="button" class="x" data-rmphoto="${i}" aria-label="تصویر ہٹائیں">×</button></div>`).join("")}
+const CAM_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>';
+const GAL_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>';
+async function addPhotos(files){
+  S.photos=S.photos||[];
+  for(const f of files){if(S.photos.length>=MAX_PHOTOS){toast(`زیادہ سے زیادہ ${MAX_PHOTOS} تصویریں`);break}
+    try{S.photos.push(await compressImage(f))}catch(e){toast("یہ تصویر نہیں کھل سکی")}}
+  const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();
+}
+function savePhotos(meta){
+  const ids=[];for(const data of (S.photos||[])){const id=attachmentId();putAttachment(id,{data,...meta,createdAt:Date.now(),...by()});ids.push(id)}
+  S.photos=[];return ids;
+}
+function sheetExpView(id){
+  const x=S.expenses.find(e=>e.id===id);if(!x)return;const inc=x.dir==="in",att=x.att||[];
+  openSheet(inc?"آمد کی تفصیل":"خرچے کی تفصیل",`
+    <div class="bal-box ${inc?"pay":"owe"}"><div><div class="note">${esc(expCat(x))}</div><div class="v ${inc?"c-pay":"c-owe"}">${fmt(x.amount)}</div></div><div class="note"><span class="num">${dstr(x.date)}</span><br>${esc(branchName(x.branch))}${x.byName?" · "+esc(x.byName):""}</div></div>
+    ${String(x.note||"").includes(" · ")?`<p style="margin:10px 0 0">${esc(String(x.note).split(" · ").slice(1).join(" · "))}</p>`:""}
+    ${x.pl===false?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
+    <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
+    <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
+    ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
+    ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
+  for(const a of att)loadAtt(a);
+}
+const ATT={};
+async function loadAtt(id){
+  const box=document.querySelector(`[data-att="${CSS.escape(id)}"]`);if(!box)return;
+  try{const d=ATT[id]||(ATT[id]=await getAttachment(id));
+    box.innerHTML=d&&d.data?`<img src="${d.data}" alt="بل کی تصویر" data-openatt="${esc(id)}"><button type="button" class="btn sm" data-saveatt="${esc(id)}">محفوظ / بھیجیں</button>`:`<span class="note">تصویر نہیں ملی</span>`}
+  catch(e){box.innerHTML=`<span class="note">انٹرنیٹ کے بغیر تصویر نہیں کھل سکتی</span>`}
+}
 function sheetExpense(dir="out"){
-  const inc=dir==="in";
+  const inc=dir==="in";S.photos=[];
   openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
     <div class="two"><div class="fld"><label for="xAmt">رقم</label><input id="xAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
@@ -564,6 +606,7 @@ function sheetExpense(dir="out"){
     <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> یہ ${inc?"آمدنی":"خرچہ"} منافع کے حساب میں شامل ہو</label>
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
+    ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn ${inc?"pay":"owe"}">محفوظ کریں</button></div></form>`);
 }
@@ -655,8 +698,14 @@ document.addEventListener("submit",async ev=>{
     const amt=num(d.amount);if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=catList(dir).find(([c])=>c===cat);
-    ok=await w(()=>db.add("expenses",{amount:amt,dir,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
+    const att=savePhotos({kind:"expense"});
+    ok=await w(()=>db.add("expenses",{amount:amt,dir,att,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
+  }
+  if(kind==="addphoto"){
+    const x=S.expenses.find(e=>e.id===id);if(!x||!(S.photos||[]).length){toast("پہلے تصویر چنیں");if(btn)btn.disabled=false;return}
+    const att=[...(x.att||[]),...savePhotos({kind:"expense",ref:id})].slice(0,MAX_PHOTOS);
+    ok=await w(()=>db.update("expenses",id,{att}));if(ok){toast("تصویر محفوظ");sheetExpView(id)}
   }
   if(kind==="branch"){
     const body={name:d.name.trim(),address:d.address.trim()};
@@ -723,10 +772,13 @@ document.addEventListener("click",async ev=>{
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
+  if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
+  if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
+  if(ds.sms){const x=WA[ds.sms];if(x)openSMS(x[0],x[1]);return}
   if(ds.rp){S.rp=ds.rp;render();return}
   if(ds.csv){exportCsv(ds.csv);return}
   if(ds.purv){sheetPurchase(ds.purv);return}
@@ -770,6 +822,8 @@ document.addEventListener("pointermove",e=>{
   const r=wrap.getBoundingClientRect();tip.textContent=g.dataset.tip;tip.style.left=(e.clientX-r.left+wrap.scrollLeft)+"px";tip.style.top=(e.clientY-r.top)+"px";tip.hidden=false;
   const b=g.querySelector(".bar");if(b)b.classList.add("on");
 });
+document.addEventListener("click",e=>{const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"){const r=e.target.closest&&e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv)}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#sheet").hidden)closeSheet()});
 $("#branchSel").addEventListener("change",e=>{S.branch=e.target.value;try{localStorage.setItem("hk_branch",S.branch)}catch(x){};render()});
@@ -798,6 +852,7 @@ document.addEventListener("change",e=>{
   if(t.id==="rFrom"){S.rFrom=t.value;render()}
   if(t.id==="rTo"){S.rTo=t.value;render()}
   if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.cost)||0,unit:it.unit});render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if((t.id==="camIn"||t.id==="galIn")&&t.files&&t.files.length){addPhotos([...t.files]);t.value=""}
   if(t.id==="vcfIn"&&t.files&&t.files[0]){const r=new FileReader();r.onload=()=>{const list=parseVcf(String(r.result||""));if(!list.length){toast("اس فائل میں کوئی نمبر نہیں ملا");return}S.contacts=list;renderContactBox("")};r.readAsText(t.files[0]);t.value=""}
 });
 function updTotal(){

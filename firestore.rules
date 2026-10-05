@@ -51,6 +51,8 @@ service cloud.firestore {
     match /entries/{id}   { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
     match /sales/{id}     { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
     match /purchases/{id} { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    // bill photos (compressed JPEG stored as text, kept under 1 MB)
+    match /attachments/{id} { allow read: if isStaff(); allow create: if isStaff() && request.resource.data.data is string && request.resource.data.data.size() < 1000000; allow update: if false; allow delete: if isManager(); }
     match /expenses/{id}  { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
   }
 }

@@ -38,3 +38,42 @@ export function openWhatsApp(phone, text) {
   if (isNative) window.location.href = url;          // Android hands wa.me links to the WhatsApp app
   else window.open(url, "_blank", "noopener");
 }
+
+// Open the phone's SMS app with the number and message filled in.
+export function openSMS(phone, text) {
+  const n = String(phone || "").replace(/[^\d+]/g, "");
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  const url = "sms:" + n + (ios ? "&" : "?") + "body=" + encodeURIComponent(text.replace(/\*/g, ""));
+  window.location.href = url;
+}
+
+// Save or share a photo (data: URL).
+export async function saveImage(filename, dataUrl) {
+  if (isNative) {
+    const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    const { Share } = await import("@capacitor/share");
+    const res = await Filesystem.writeFile({ path: filename, data: dataUrl.split(",")[1], directory: Directory.Cache });
+    await Share.share({ title: filename, url: res.uri, dialogTitle: "تصویر بھیجیں یا محفوظ کریں" });
+    return;
+  }
+  const a = document.createElement("a"); a.href = dataUrl; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+// Shrink a photo so a bill stays readable but the file stays small (well under Firestore's 1 MB limit).
+export function compressImage(file, maxSide = 1400) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => {
+      let { width: w, height: h } = img; const k = Math.min(1, maxSide / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+      const c = document.createElement("canvas"); c.width = w; c.height = h;
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, w, h); g.drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      let q = 0.7, out = c.toDataURL("image/jpeg", q);
+      while (out.length > 650000 && q > 0.35) { q -= 0.1; out = c.toDataURL("image/jpeg", q); }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("bad image")); };
+    img.src = url;
+  });
+}

@@ -168,6 +168,15 @@ export async function createShop(user, shopName, name) {
 export async function requestAccess(user, name) {
   await setDoc(doc(fs, "users", user.uid), { name, email: user.email, role: "pending", createdAt: Date.now(), u: serverTimestamp() });
 }
+/* bill photos: own collection, never synced to every device; fetched when opened */
+export function putAttachment(id, data) {
+  fire(setDoc(doc(fs, "attachments", id), { ...data, u: serverTimestamp() }));
+}
+export async function getAttachment(id) {
+  const s = await getDoc(doc(fs, "attachments", id));
+  return s.exists() ? s.data() : null;
+}
+export function attachmentId() { return doc(collection(fs, "attachments")).id; }
 export function setRole(uid, role, branch) {
   db.update("users", uid, branch === undefined ? { role } : { role, branch });
 }

@@ -193,3 +193,15 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .cat-chips button{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer}
 .cat-chips button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .cat-chips button.own{border-style:dashed}
+
+.btn.sms{background:var(--surface);border-color:#2b6fd6;color:#2b6fd6}
+.led-row.clickable{cursor:pointer}.led-row.clickable:hover{background:var(--sunk)}
+.pill.clip{display:inline-flex;align-items:center;gap:3px;vertical-align:middle}
+.photo-row{display:flex;gap:8px;flex-wrap:wrap}
+.thumb{position:relative;width:76px;height:76px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--sunk);display:grid;place-items:center}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb .x{position:absolute;top:3px;inset-inline-end:3px;width:24px;height:24px;font-size:14px;background:rgba(0,0,0,.6);color:#fff}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.thumb.lg{width:auto;height:auto;min-height:120px;display:flex;flex-direction:column;gap:6px;padding:6px}
+.thumb.lg img{height:auto;max-height:260px;object-fit:contain;border-radius:6px;cursor:zoom-in}
+.thumb.lg img.zoom{position:fixed;inset:0;z-index:50;max-height:none;width:100vw;height:100vh;object-fit:contain;background:rgba(0,0,0,.92);border-radius:0;cursor:zoom-out}
