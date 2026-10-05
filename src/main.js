@@ -3,6 +3,7 @@ import { configured, db, list, newId, putAttachment, getAttachment, attachmentId
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
+import { saveBinary } from "./native.js";
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -121,7 +122,7 @@ function vKhata(){
   list.sort((a,b)=>Math.abs(bal[b.id]||0)-Math.abs(bal[a.id]||0));
   let recv=0,payb=0;for(const c of list){const v=bal[c.id]||0;if(v>0)recv+=v;else payb-=v}
   return `${readOnlyBanner()}
-  <div class="sec-head"><h2 class="h">کھاتے</h2><div class="spacer"></div>${S.canWrite?`<button class="btn primary" data-act="newCust">+ ${S.kind==="supplier"?"نیا سپلائر":"نیا گاہک"}</button>`:""}</div>
+  <div class="sec-head"><h2 class="h">کھاتے</h2><div class="spacer"></div>${S.canWrite?`<button class="btn" data-act="bulk">${XL_ICON} Excel / PDF سے لائیں</button><button class="btn primary" data-act="newCust">+ ${S.kind==="supplier"?"نیا سپلائر":"نیا گاہک"}</button>`:""}</div>
   <div class="chips"><button class="chip" data-kind="customer" aria-pressed="${S.kind==="customer"}">گاہک</button><button class="chip" data-kind="supplier" aria-pressed="${S.kind==="supplier"}">سپلائر</button></div>
   <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
     <div class="card stat owe"><span class="lbl">آپ کو لینے ہیں</span><span class="val">${fmt(recv)}</span></div>
@@ -484,6 +485,59 @@ function sheetCustForm(c){
     ${!c.id?`<div class="fld"><label for="cOpen">پرانا بقایا (اگر ہو) — گاہک سے لینے ہیں / سپلائر کو دینے ہیں</label><input id="cOpen" name="opening" class="num" inputmode="decimal" placeholder="0"></div>`:""}
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
 }
+/* ---------- bulk add customers / suppliers from Excel, CSV or PDF ---------- */
+const XL_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 12l4 5M13 12l-4 5"/></svg>';
+function sheetBulk(){
+  S.bulk=null;S.bulkKind=S.kind||"customer";S.bulkBranch=defBranch();
+  openSheet("Excel یا PDF سے کھاتے لائیں",`<div class="f">
+    <p class="note" style="margin:0">ایک ہی بار میں بہت سے گاہک یا سپلائر شامل کریں۔ Excel (یا CSV) فائل میں یہ کالم ہوں: <b>نام، فون، قسم، پرانا بقایا، پتہ</b>۔ صرف "نام" ضروری ہے۔ PDF سے بھی نام، نمبر اور رقم پڑھنے کی کوشش کی جاتی ہے۔</p>
+    <div class="actions" style="justify-content:flex-start"><button type="button" class="btn sm" data-act="bulkTpl">${XL_ICON} نمونہ Excel فائل</button></div>
+    <div class="two"><div class="fld"><span class="lbl-sm">جن کی قسم فائل میں نہ ہو وہ</span><div class="seg"><button type="button" data-bk="customer" aria-pressed="${S.bulkKind==="customer"}">گاہک</button><button type="button" data-bk="supplier" aria-pressed="${S.bulkKind==="supplier"}">سپلائر</button></div></div>
+    <div class="fld"><label for="bulkBr">برانچ</label><select id="bulkBr">${branchOptions(S.bulkBranch)}</select></div></div>
+    <label class="btn primary" for="bulkFile" style="justify-content:center;cursor:pointer">${XL_ICON} فائل چنیں (Excel / CSV / PDF)</label>
+    <input type="file" id="bulkFile" accept=".xlsx,.xls,.csv,.pdf,application/pdf,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    <div id="bulkOut"></div></div>`);
+}
+async function readBulk(file){
+  const out=$("#bulkOut");out.innerHTML=`<p class="note">فائل پڑھی جا رہی ہے…</p>`;
+  try{
+    const imp=await import("./importer.js");
+    const rows=/\.pdf$/i.test(file.name)||file.type==="application/pdf"?await imp.readPdf(file,S.bulkKind):await imp.readSheet(file,S.bulkKind);
+    const seenP=new Set(),seenN=new Set();
+    for(const c of S.customers){if(c.phone)seenP.add(imp.cleanPhone(c.phone));seenN.add((c.name||"").trim().toLowerCase())}
+    S.bulk=rows.map(r=>{const dup=(r.phone&&seenP.has(r.phone))||seenN.has(r.name.trim().toLowerCase());if(r.phone)seenP.add(r.phone);seenN.add(r.name.trim().toLowerCase());return {...r,dup,sel:!dup}});
+    S.bulkPdf=/\.pdf$/i.test(file.name);
+    renderBulk();
+  }catch(e){console.error(e);out.innerHTML=`<p class="pay-hint bad">یہ فائل نہیں پڑھی جا سکی۔ Excel یا CSV فائل استعمال کریں، یا نمونہ فائل میں ڈیٹا ڈال کر دوبارہ کوشش کریں۔</p>`}
+}
+function renderBulk(){
+  const out=$("#bulkOut");if(!out||!S.bulk)return;const n=S.bulk.filter(r=>r.sel).length,d=S.bulk.filter(r=>r.dup).length;
+  if(!S.bulk.length){out.innerHTML=`<p class="pay-hint bad">فائل میں کوئی نام نہیں ملا۔ پہلی قطار میں "نام" اور "فون" والے کالم بنائیں۔</p>`;return}
+  out.innerHTML=`<div class="pay-hint ${d?"due":"ok"}">${S.bulk.length} نام ملے${d?` · ${d} پہلے سے موجود (ان پر ٹک نہیں لگایا)`:""}${S.bulkPdf?" · PDF سے پڑھے گئے نام ایک بار ضرور چیک کر لیں":""}</div>
+    <div class="tbl-wrap"><table class="bulk-tbl"><thead><tr><th><input type="checkbox" id="bulkAll" ${n===S.bulk.length?"checked":""} aria-label="سب"></th><th>نام</th><th>فون</th><th>قسم</th><th>پرانا بقایا</th></tr></thead><tbody>
+    ${S.bulk.map((r,i)=>`<tr class="${r.dup?"dup":""}"><td><input type="checkbox" data-bsel="${i}" ${r.sel?"checked":""} aria-label="شامل کریں"></td>
+      <td><input data-bf="${i}:name" value="${esc(r.name)}">${r.dup?`<div class="note">پہلے سے موجود</div>`:""}</td><td><input data-bf="${i}:phone" value="${esc(r.phone)}" dir="ltr" inputmode="tel"></td>
+      <td><select data-bf="${i}:kind"><option value="customer" ${r.kind!=="supplier"?"selected":""}>گاہک</option><option value="supplier" ${r.kind==="supplier"?"selected":""}>سپلائر</option></select></td>
+      <td><input data-bf="${i}:balance" value="${r.balance||""}" class="num" inputmode="decimal" placeholder="0"></td></tr>`).join("")}</tbody></table></div>
+    <p class="note" style="margin:0">پرانا بقایا: گاہک کے لیے = آپ نے لینے ہیں، سپلائر کے لیے = آپ نے دینے ہیں۔ الٹا ہو تو منفی (-) لکھیں۔</p>
+    <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button type="button" class="btn primary" data-act="bulkSave" ${n?"":"disabled"}>${n} کھاتے شامل کریں</button></div>`;
+}
+async function saveBulk(btn){
+  const rows=S.bulk.filter(r=>r.sel&&r.name.trim());if(!rows.length)return;btn.disabled=true;
+  const br=($("#bulkBr")||{}).value||defBranch();let done=0;
+  for(let i=0;i<rows.length;i+=150){
+    const ops=[];
+    for(const r of rows.slice(i,i+150)){
+      const id=newId("customers"),kind=r.kind==="supplier"?"supplier":"customer",bal=num(r.balance);
+      ops.push({op:"set",col:"customers",id,data:{name:r.name.trim(),phone:r.phone||"",kind,branch:br,address:r.address||"",createdAt:Date.now(),...by()}});
+      if(bal)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:id,type:(kind==="customer")===(bal>0)?"gave":"got",amount:Math.abs(bal),note:"پرانا بقایا",date:Date.now(),branch:br,...by()}});
+    }
+    if(!await w(()=>db.batch(ops))){btn.disabled=false;return}
+    done+=Math.min(150,rows.length-i);btn.textContent=`${done} / ${rows.length}…`;
+  }
+  closeSheet();S.tab="khata";render();toast(`${done} کھاتے شامل ہو گئے`);
+}
+
 /* ---------- QR codes and PDF documents ---------- */
 const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 14h6M9 18h4"/></svg>';
 const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
@@ -951,6 +1005,7 @@ document.addEventListener("click",async ev=>{
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
+  if(ds.bk){S.bulkKind=ds.bk;document.querySelectorAll("[data-bk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.bk===ds.bk));return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
@@ -987,6 +1042,9 @@ document.addEventListener("click",async ev=>{
   if(a==="clearP"){S.pcart=[];S.pPaid="";render()}
   if(a==="savePurchase")savePurchase();
   if(a==="newExp")sheetExpense("out");
+  if(a==="bulk")sheetBulk();
+  if(a==="bulkSave")saveBulk(t);
+  if(a==="bulkTpl"){busy(t,async()=>{const imp=await import("./importer.js");return saveBinary("khate-namoona.xlsx",await imp.templateXlsx(),"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})}
   if(a==="newInc")sheetExpense("in");
   if(a==="copySummary"){try{await navigator.clipboard.writeText(summaryText());toast("کاپی ہو گیا — واٹس ایپ پر پیسٹ کریں")}catch(e){toast("کاپی نہیں ہو سکا")}}
   if(a==="pickNative")pickNative();
@@ -1017,6 +1075,7 @@ document.addEventListener("input",e=>{
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
   if(t.id==="xCat")syncCat();
+  if(t.dataset.bf){const [i,f]=t.dataset.bf.split(":");if(S.bulk&&S.bulk[+i])S.bulk[+i][f]=f==="balance"?t.value:t.value}
   if(t.id==="iSaleSize")t.dataset.touched="1";
   if(["iBuySize","iSaleSize","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
 });
@@ -1026,6 +1085,10 @@ document.addEventListener("change",e=>{
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
+  if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
+  if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
+  if(t.dataset.bf&&t.tagName==="SELECT"){const [i,f]=t.dataset.bf.split(":");S.bulk[+i][f]=t.value}
   if(t.dataset.togsale){const id=t.dataset.togsale;w(()=>db.update("expenses",id,{sale:t.checked})).then(ok=>{if(ok){toast(t.checked?"فروخت میں شمار ہو گئی":"فروخت سے نکال دی");sheetExpView(id)}})}
   if(t.dataset.unitsel||t.id==="iDiff")syncItemForm();
   if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
