@@ -1,5 +1,5 @@
 import "./style.css";
-import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
+import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage } from "./native.js";
 
 const $=s=>document.querySelector(s);
@@ -469,6 +469,7 @@ function sheetCust(id){
    <div class="bal-box ${v>0?"owe":v<0?"pay":"zero"}"><div><div class="note">${v>0?"آپ نے لینے ہیں":v<0?"آپ نے دینے ہیں":"حساب برابر ہے"}</div><div class="v ${v>0?"c-owe":v<0?"c-pay":""}">${fmt(Math.abs(v))}</div></div>
      <div class="note"><span class="num">${esc(c.phone||"")}</span><br>${esc(branchName(c.branch))}</div></div>
    ${S.canWrite?(c.kind==="supplier"?`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادائیگی کی</button><button class="btn pay" data-entry="got">مال خریدا (ادھار)</button></div>`:`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادھار دیا / مال دیا</button><button class="btn pay" data-entry="got">رقم ملی</button></div>`):""}
+   ${(()=>{const pe=[...es].reverse().find(x=>(x.att||[]).length);return pe?`<button class="latest-bill" data-entv-btn="${esc(pe.id)}">${CLIP_ICON}<span>تازہ بل کی تصویر · <span class="num">${dstr(pe.date)}</span> · ${esc(pe.note||fmt(pe.amount))}</span><b>دیکھیں</b></button>`:""})()}
    <div id="entryForm"></div>
    <div class="chips" style="margin:12px 0">
      ${waButtons(c.phone,[[c.kind==="supplier"?"حساب کا پیغام":"بقایا یاددہانی","remind"],["پورا کھاتہ بھیجیں","stmt"]])}
@@ -486,6 +487,7 @@ function entryFormHtml(type){
     <div class="fld"><label for="eDate">تاریخ</label><input id="eDate" name="date" type="date" value="${new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)}"></div></div>
     <div class="fld"><label for="eNote">تفصیل</label><input id="eNote" name="note" placeholder="${type==="gave"?"مثلاً 10 بیگ سیمنٹ":"مثلاً نقد / بینک ٹرانسفر"}"></div>
     ${photoPicker()}
+    ${S.entries.some(x=>x.cust===S.openCust&&(x.att||[]).length)?`<p class="note" style="margin:0">نئی تصویر لگانے سے اس کھاتے کی پرانی بل والی تصویر ہٹ جائے گی۔</p>`:""}
     <div class="actions"><button type="button" class="btn" data-cancelentry>منسوخ</button><button class="btn ${type==="gave"?"owe":"pay"}">محفوظ کریں</button></div></form>`;
 }
 function sheetItemForm(it){
@@ -590,6 +592,13 @@ function sheetExpView(id){
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
 }
+/* one bill photo per customer/supplier: a new photo replaces the photos on their older entries */
+function replaceOldPhotos(custId,keepId){
+  for(const e of S.entries.filter(x=>x.cust===custId&&x.id!==keepId&&(x.att||[]).length)){
+    if(S.isAdmin)for(const a of e.att){deleteAttachment(a);delete ATT[a]}
+    db.update("entries",e.id,{att:[]});
+  }
+}
 function sheetEntryView(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return;const c=S.customers.find(x=>x.id===e.cust)||{},sup=c.kind==="supplier",att=e.att||[];
   const label=e.note||(sup?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی"));
@@ -597,6 +606,7 @@ function sheetEntryView(id){
   openSheet(c.name||"اندراج",`
     <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
     <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
+    <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
     <div class="actions" style="margin-top:14px"><button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
@@ -686,8 +696,9 @@ document.addEventListener("submit",async ev=>{
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
     if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
-    const att=savePhotos({kind:"entry",cust:S.openCust});
-    ok=await w(()=>db.add("entries",{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...by()}));
+    const att=savePhotos({kind:"entry",cust:S.openCust}),eid=newId("entries");
+    ok=await w(()=>db.set("entries",eid,{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...by()}));
+    if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
     if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
   }
   if(kind==="item"){
@@ -721,7 +732,7 @@ document.addEventListener("submit",async ev=>{
     const col=f.dataset.col==="entries"?"entries":"expenses",x=S[col].find(e=>e.id===id);
     if(!x||!(S.photos||[]).length){toast("پہلے تصویر چنیں");if(btn)btn.disabled=false;return}
     const att=[...(x.att||[]),...savePhotos({kind:col==="entries"?"entry":"expense",ref:id})].slice(0,MAX_PHOTOS);
-    ok=await w(()=>db.update(col,id,{att}));if(ok){toast("تصویر محفوظ");col==="entries"?sheetEntryView(id):sheetExpView(id)}
+    ok=await w(()=>db.update(col,id,{att}));if(ok&&col==="entries")replaceOldPhotos(x.cust,id);if(ok){toast("تصویر محفوظ");col==="entries"?sheetEntryView(id):sheetExpView(id)}
   }
   if(kind==="branch"){
     const body={name:d.name.trim(),address:d.address.trim()};
@@ -789,6 +800,7 @@ document.addEventListener("click",async ev=>{
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
   if(ds.backcust){sheetCust(ds.backcust);return}
+  if(ds.entvBtn){sheetEntryView(ds.entvBtn);return}
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}

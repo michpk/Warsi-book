@@ -15,7 +15,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   collection, doc, getDocsFromCache, getDoc, onSnapshot, query, where, setDoc,
-  updateDoc, writeBatch, serverTimestamp, increment, Timestamp
+  updateDoc, deleteDoc, writeBatch, serverTimestamp, increment, Timestamp
 } from "firebase/firestore";
 import { firebaseConfig } from "./config.js";
 
@@ -176,6 +176,7 @@ export async function getAttachment(id) {
   const s = await getDoc(doc(fs, "attachments", id));
   return s.exists() ? s.data() : null;
 }
+export function deleteAttachment(id) { fire(deleteDoc(doc(fs, "attachments", id))); }
 export function attachmentId() { return doc(collection(fs, "attachments")).id; }
 export function setRole(uid, role, branch) {
   db.update("users", uid, branch === undefined ? { role } : { role, branch });

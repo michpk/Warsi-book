@@ -205,3 +205,5 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .thumb.lg{width:auto;height:auto;min-height:120px;display:flex;flex-direction:column;gap:6px;padding:6px}
 .thumb.lg img{height:auto;max-height:260px;object-fit:contain;border-radius:6px;cursor:zoom-in}
 .thumb.lg img.zoom{position:fixed;inset:0;z-index:50;max-height:none;width:100vw;height:100vh;object-fit:contain;background:rgba(0,0,0,.92);border-radius:0;cursor:zoom-out}
+.latest-bill{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;border:1px dashed var(--accent);background:var(--accent-2);color:var(--fg);border-radius:var(--r);padding:10px 12px;cursor:pointer;text-align:start}
+.latest-bill span{flex:1;min-width:0;font-size:13.5px}.latest-bill b{color:var(--accent);font-size:13px}
