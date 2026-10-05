@@ -1,6 +1,6 @@
 import "./style.css";
 import { configured, db, list, newId, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
-import { isNative, saveFile, pickPhoneContact } from "./native.js";
+import { isNative, saveFile, pickPhoneContact, openWhatsApp } from "./native.js";
 
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -23,7 +23,7 @@ const ICON={
 };
 const TABS=[["home","خلاصہ"],["khata","کھاتے"],["sale","بل"],["cash","روزنامچہ"],["report","رپورٹس"],["stock","اسٹاک"],["branch","برانچیں"]];
 
-const S={branches:[],items:[],customers:[],entries:[],sales:[],purchases:[],expenses:[],contacts:null,billMode:"sale",pcart:[],pSupp:"",pPaid:"",updCost:true,cashDate:"",rp:"month",rFrom:"",rTo:"",loaded:{},tab:"home",branch:"all",q:"",stockQ:"",kind:"customer",
+const S={branches:[],items:[],customers:[],entries:[],sales:[],purchases:[],expenses:[],contacts:null,billMode:"sale",pcart:[],pSupp:"",pPaid:"",saleMode:"cash",pMode:"cash",saleLedger:true,pLedger:true,shopName:"",updCost:true,cashDate:"",rp:"month",rFrom:"",rTo:"",loaded:{},tab:"home",branch:"all",q:"",stockQ:"",kind:"customer",
   canWrite:true,isAdmin:false,uid:null,noDb:false,cart:[],saleCust:"",salePaid:""};
 try{S.branch=localStorage.getItem("hk_branch")||"all";S.tab=localStorage.getItem("hk_tab")||"home"}catch(e){}
 const me={uid:null,name:"",role:null};
@@ -41,7 +41,7 @@ function cashFlow(from,to){
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to)out.push({date:x.date,amt:x.amount,label:"خرچہ · "+(x.note||""),exp:x.id});
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){if(x.dir==="in")inR.push({date:x.date,amt:x.amount,label:"آمد · "+(x.note||""),exp:x.id});else out.push({date:x.date,amt:x.amount,label:"خرچہ · "+(x.note||""),exp:x.id})}
   return {inR,out};
 }
 const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s).reduce((a,v)=>a+(Number(v)||0),0);return Number(s[b])||0};
@@ -129,6 +129,22 @@ function vKhata(){
   </section>`;
 }
 
+/* who pays how: cash / credit / part, optional ledger entry, quick-add party */
+function payBlock(k,total){
+  const sale=k==="sale",mode=sale?S.saleMode:S.pMode,party=sale?S.saleCust:S.pSupp,paid=sale?S.salePaid:S.pPaid,led=sale?S.saleLedger:S.pLedger;
+  const list=S.customers.filter(c=>sale?(c.kind||"customer")==="customer":c.kind==="supplier");
+  const who=sale?"گاہک":"سپلائر",pid=sale?"saleCust":"pSupp";
+  const M=sale?[["cash","پورا نقد"],["credit","پورا ادھار"],["part","کچھ نقد، باقی ادھار"]]:[["cash","پوری ادائیگی نقد"],["credit","پورا ادھار"],["part","کچھ نقد، باقی ادھار"]];
+  return `<div class="fld"><label for="${pid}">${who}</label><div style="display:flex;gap:6px"><select id="${pid}" style="flex:1;min-width:0"><option value="">${sale?"کاؤنٹر گاہک (نام کے بغیر)":"نام کے بغیر"}</option>${list.map(c=>`<option value="${esc(c.id)}" ${party===c.id?"selected":""}>${esc(c.name)}${c.phone?" · \u2066"+esc(c.phone)+"\u2069":""}</option>`).join("")}</select><button type="button" class="btn sm" data-quick="${sale?"customer":"supplier"}">+ نیا ${who}</button></div></div>
+    <div class="fld"><span class="lbl-sm">ادائیگی</span><div class="seg" role="group" aria-label="ادائیگی">${M.map(([v,l])=>`<button type="button" data-pm="${k}:${v}" aria-pressed="${mode===v}">${l}</button>`).join("")}</div></div>
+    ${mode==="part"?`<div class="fld"><label for="${sale?"salePaid":"pPaid"}">${sale?"نقد وصول":"نقد ادا کیا"}</label><input id="${sale?"salePaid":"pPaid"}" class="num" inputmode="decimal" placeholder="0" value="${esc(paid)}"></div>`:""}
+    ${party&&mode==="cash"?`<label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="${sale?"saleLedger":"pLedger"}" ${led?"checked":""}> ${who} کے کھاتے میں بھی درج کریں (نقد بھی ریکارڈ میں رہے گا)</label>`:""}`;
+}
+function payCalc(k,total){
+  const sale=k==="sale",mode=sale?S.saleMode:S.pMode;
+  const paid=mode==="cash"?total:mode==="credit"?0:Math.min(num(sale?S.salePaid:S.pPaid),total);
+  return {mode,paid,due:Math.max(0,total-paid)};
+}
 function vSale(){
   if(!S.canWrite)return readOnlyBanner()+vSalesList();
   const branches=S.branches;
@@ -145,10 +161,7 @@ function vSale(){
     ${S.cart.length?`<div>${S.cart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div class="t" style="font-weight:600">${esc(l.name)}</div><div class="note">موجود: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.unit||"")}</div></div><input id="q${i}" data-cq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="p${i}" data-cp="${i}" inputmode="decimal" value="${l.price}" aria-label="ریٹ"><button class="x" data-rm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
       <div class="total-bar"><span>کل رقم</span><span class="num" id="cartTotal">${fmt(total)}</span></div></div>`
     :`<div class="note">اوپر سے چیز چنیں۔ تعداد اور ریٹ بدل سکتے ہیں۔</div>`}
-    <div class="two">
-      <div class="fld"><label for="saleCust">گاہک (ادھار کے لیے)</label><select id="saleCust"><option value="">نقد گاہک (کاؤنٹر)</option>${custs.map(c=>`<option value="${esc(c.id)}" ${S.saleCust===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
-      <div class="fld"><label for="salePaid">نقد وصول</label><input id="salePaid" class="num" inputmode="decimal" placeholder="${total}" value="${esc(S.salePaid)}"></div>
-    </div>
+    ${payBlock("sale",total)}
     <div class="note" id="saleHint"></div>
     <div class="actions"><button class="btn" data-act="clearCart" ${S.cart.length?"":"disabled"}>صاف کریں</button><button class="btn primary" data-act="saveSale" ${S.cart.length?"":"disabled"}>بل محفوظ کریں</button></div>
   </section>
@@ -174,10 +187,7 @@ function vPurchase(){
     ${S.pcart.length?`<div>${S.pcart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div class="note">ابھی: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.unit||"")}</div></div><input id="pq${i}" data-pq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="pp${i}" data-pp="${i}" inputmode="decimal" value="${l.price}" aria-label="خرید ریٹ"><button class="x" data-prm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
       <div class="total-bar"><span>کل رقم</span><span class="num" id="pTotal">${fmt(total)}</span></div></div>`
     :`<div class="note">چیز چنیں، پھر تعداد اور خرید ریٹ لکھیں۔ محفوظ کرنے پر اسٹاک بڑھ جائے گا۔</div>`}
-    <div class="two">
-      <div class="fld"><label for="pSupp">سپلائر</label><select id="pSupp"><option value="">نقد خریداری</option>${supps.map(c=>`<option value="${esc(c.id)}" ${S.pSupp===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select></div>
-      <div class="fld"><label for="pPaid">نقد ادا کیا</label><input id="pPaid" class="num" inputmode="decimal" placeholder="${total}" value="${esc(S.pPaid)}"></div>
-    </div>
+    ${payBlock("purchase",total)}
     <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="updCost" ${S.updCost?"checked":""}> اسٹاک میں خرید ریٹ بھی نئے ریٹ سے بدل دیں</label>
     <div class="note" id="pHint"></div>
     <div class="actions"><button class="btn" data-act="clearP" ${S.pcart.length?"":"disabled"}>صاف کریں</button><button class="btn primary" data-act="savePurchase" ${S.pcart.length?"":"disabled"}>خریداری محفوظ کریں</button></div>
@@ -198,7 +208,7 @@ function vCash(){
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2><div class="spacer"></div>
     <input type="date" id="cashDate" class="search" style="flex:0 0 auto;min-width:0" value="${d}" aria-label="تاریخ">
-    ${S.canWrite?`<button class="btn primary" data-act="newExp">+ خرچہ</button>`:""}</div>
+    ${S.canWrite?`<button class="btn pay" data-act="newInc">+ آمد</button><button class="btn owe" data-act="newExp">+ خرچہ</button>`:""}</div>
   <div class="stats">
     <div class="card stat"><span class="lbl">پچھلا کیش (حساب سے)</span><span class="val">${fmt(open)}</span></div>
     <div class="card stat pay"><span class="lbl">آج آمد</span><span class="val">${fmt(tin)}</span></div>
@@ -207,11 +217,11 @@ function vCash(){
   </div>
   <div class="grid2">
     <section class="card"><div class="card-h"><h3>آمد (نقد وصول)</h3><span class="pill pay num">${fmt(tin)}</span></div>
-      ${inR.length?`<div class="led" style="border:0;border-radius:0">${rowsOf(inR,"c-pay")}</div>`:`<div class="empty">اس دن کوئی نقد وصولی نہیں۔ بل کی نقد رقم اور گاہکوں سے ملنے والی رقم خود یہاں آتی ہے۔</div>`}</section>
+      ${inR.length?`<div class="led" style="border:0;border-radius:0">${rowsOf(inR,"c-pay")}</div>`:`<div class="empty">اس دن کوئی نقد وصولی نہیں۔ بل کی نقد رقم اور گاہکوں سے ملنے والی رقم خود یہاں آتی ہے۔ کوئی اور رقم آئے تو "+ آمد" سے لکھیں۔</div>`}</section>
     <section class="card"><div class="card-h"><h3>ادائیگی و خرچ</h3><span class="pill owe num">${fmt(tout)}</span></div>
       ${out.length?`<div class="led" style="border:0;border-radius:0">${rowsOf(out,"c-owe")}</div>`:`<div class="empty">اس دن کوئی ادائیگی یا خرچہ نہیں۔ بجلی، کرایہ، تنخواہ جیسے خرچے "+ خرچہ" سے لکھیں۔</div>`}</section>
   </div>
-  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔</p>`;
+  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری، اور ہاتھ سے لکھی آمد اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔</p>`;
 }
 /* ---------- reports ---------- */
 function rRange(){
@@ -230,11 +240,11 @@ function rRange(){
 const expCat=x=>String(x.note||"متفرق").split(" · ")[0]||"متفرق";
 function reportData(){
   const [from,to,label]=rRange(),inR=x=>inBranch(x)&&x.date>=from&&x.date<to;
-  const sales=S.sales.filter(inR),purch=S.purchases.filter(inR),exps=S.expenses.filter(inR);
+  const sales=S.sales.filter(inR),purch=S.purchases.filter(inR),allX=S.expenses.filter(inR),exps=allX.filter(x=>x.dir!=="in"&&x.pl!==false),incs=allX.filter(x=>x.dir==="in"&&x.pl!==false);
   const sum=(a,f)=>a.reduce((x,y)=>x+(Number(f(y))||0),0);
   const saleT=sum(sales,s=>s.total),paidT=sum(sales,s=>s.paid);
   const cogs=sum(sales,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty));
-  const expT=sum(exps,x=>x.amount),purT=sum(purch,p=>p.total);
+  const expT=sum(exps,x=>x.amount),incT=sum(incs,x=>x.amount),purT=sum(purch,p=>p.total);
   const ck=id=>S.customers.find(c=>c.id===id)||{};
   const rec=sum(S.entries.filter(e=>inR(e)&&e.type==="got"&&!e.sale&&!e.purchase&&ck(e.cust).kind!=="supplier"),e=>e.amount);
   const supPaid=sum(S.entries.filter(e=>inR(e)&&e.type==="gave"&&ck(e.cust).kind==="supplier"),e=>e.amount);
@@ -257,9 +267,9 @@ function reportData(){
   const recv=S.customers.filter(c=>inBranch(c)&&(c.kind||"customer")==="customer"&&(bal[c.id]||0)>0).map(c=>({c,v:bal[c.id],last:lastGot[c.id]||0})).sort((a,b)=>b.v-a.v);
   const pay=S.customers.filter(c=>inBranch(c)&&c.kind==="supplier"&&(bal[c.id]||0)<0).map(c=>({c,v:-bal[c.id]})).sort((a,b)=>b.v-a.v);
   // branches
-  const br=S.branches.map(b=>{const bs=S.sales.filter(s=>s.branch===b.id&&s.date>=from&&s.date<to),bx=S.expenses.filter(x=>x.branch===b.id&&x.date>=from&&x.date<to);
-    const st=sum(bs,s=>s.total),bc=sum(bs,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty)),be=sum(bx,x=>x.amount);return {name:b.name,sales:st,n:bs.length,gross:st-bc,exp:be,net:st-bc-be}});
-  return {from,to,label,sales,saleT,paidT,credit:saleT-paidT,cogs,gross:saleT-cogs,expT,net:saleT-cogs-expT,purT,purCredit:purT-sum(purch,p=>p.paid),rec,supPaid,
+  const br=S.branches.map(b=>{const bs=S.sales.filter(s=>s.branch===b.id&&s.date>=from&&s.date<to),bxa=S.expenses.filter(x=>x.branch===b.id&&x.date>=from&&x.date<to&&x.pl!==false),bi=sum(bxa.filter(x=>x.dir==="in"),x=>x.amount),bx=bxa.filter(x=>x.dir!=="in");
+    const st=sum(bs,s=>s.total),bc=sum(bs,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty)),be=sum(bx,x=>x.amount);return {name:b.name,sales:st,n:bs.length,gross:st-bc,exp:be,net:st-bc-be+bi}});
+  return {from,to,label,sales,saleT,paidT,credit:saleT-paidT,cogs,gross:saleT-cogs,expT,incT,net:saleT-cogs-expT+incT,purT,purCredit:purT-sum(purch,p=>p.paid),rec,supPaid,
     series:[...buckets.values()],monthly,items,custSales,expCats,recv,pay,br,nPurch:purch.length};
 }
 function chartSvg(series,monthly){
@@ -301,6 +311,7 @@ function vReport(){
         <span class="k">خرید لاگت (بکے مال کی)</span><span class="v">− ${fmt(R.cogs)}</span>
         <span class="sep"></span>
         <span class="k"><b>مجموعی منافع</b>${R.saleT?` <span class="pill num">${Math.round(R.gross/R.saleT*100)}%</span>`:""}</span><span class="v">${fmt(R.gross)}</span>
+        ${R.incT?`<span class="k">دیگر آمدنی</span><span class="v">+ ${fmt(R.incT)}</span>`:""}
         <span class="k">خرچے</span><span class="v">− ${fmt(R.expT)}</span>
         <span class="sep"></span>
         <span class="k big"><b>خالص منافع</b></span><span class="v big ${R.net>=0?"c-pay":"c-owe"}">${fmt(R.net)}</span>
@@ -404,7 +415,7 @@ function vBranch(){
 
 /* ---------- sheets ---------- */
 function openSheet(title,body){const sh=$("#sheet");sh.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" dir="rtl" lang="ur"><div class="sheet-h"><h3>${esc(title)}</h3><button class="x" data-close aria-label="بند کریں">×</button></div>${body}</div>`;sh.hidden=false;const f=sh.querySelector("input,select,textarea");if(f)setTimeout(()=>f.focus(),30);fillNames()}
-function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.openItem=null}
+function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.openItem=null;S.afterCust=null}
 function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
 const branchOptions=(sel)=>S.branches.map(b=>`<option value="${esc(b.id)}" ${sel===b.id?"selected":""}>${esc(b.name)}</option>`).join("");
 const defBranch=()=>S.branch!=="all"?S.branch:(S.branches[0]||{}).id||"";
@@ -426,20 +437,40 @@ function sheetCustForm(c){
     ${!c.id?`<div class="fld"><label for="cOpen">پرانا بقایا (اگر ہو) — گاہک سے لینے ہیں / سپلائر کو دینے ہیں</label><input id="cOpen" name="opening" class="num" inputmode="decimal" placeholder="0"></div>`:""}
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
 }
+/* ---------- WhatsApp ---------- */
+const shopLine=()=>S.shopName?"\n— "+S.shopName:"";
+function waReminder(c,v){
+  if(c.kind==="supplier")return v<0?`السلام علیکم ${c.name}،\nہمارے حساب کے مطابق آپ کے ${fmt(-v)} ہمارے ذمے باقی ہیں۔ جلد ادا کر دیں گے، ان شاء اللہ۔${shopLine()}`:`السلام علیکم ${c.name}،\nہمارا حساب ${v>0?"آپ کے ذمے "+fmt(v)+" بنتا ہے":"برابر ہے"}۔${shopLine()}`;
+  return v>0?`السلام علیکم ${c.name}،\nآپ کے کھاتے میں ${fmt(v)} باقی ہیں۔ براہ کرم سہولت سے ادائیگی کر دیں۔ شکریہ${shopLine()}`:`السلام علیکم ${c.name}،\nآپ کا کھاتہ ${v<0?"ہمارے ذمے "+fmt(-v):"برابر"} ہے۔ شکریہ${shopLine()}`;
+}
+function waStatement(c,rows,v){
+  const sup=c.kind==="supplier";
+  const lines=rows.slice(0,15).reverse().map(e=>`${new Date(e.date).toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}  ${e.note||(e.type==="gave"?(sup?"ادائیگی":"ادھار"):(sup?"مال آیا":"وصولی"))}  ${e.type==="gave"?"+":"−"}${fq(e.amount)}`);
+  return `السلام علیکم ${c.name}،\n*کھاتے کی تفصیل*${rows.length>15?" (آخری 15 اندراج)":""}\n\n${lines.join("\n")}\n\n*${v>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):v<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}: ${fmt(Math.abs(v))}*${shopLine()}`;
+}
+function waBill(s,purchase){
+  return `${purchase?"*خریداری":"*بل"} #${s.no}*  ${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||""}\n\n`+(s.lines||[]).map(l=>`${l.name}\n   ${fq(l.qty)} ${l.unit||""} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\n\n*کل: ${fmt(s.total)}*\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"")+shopLine();
+}
+function waButtons(phone,pairs){
+  const ok=String(phone||"").replace(/\D/g,"").length>=10;
+  if(!ok)return `<span class="note">واٹس ایپ کے لیے فون نمبر ڈالیں</span>`;
+  return pairs.map(([label,key])=>`<button class="btn sm wa" data-wa="${key}">${WA_ICON}${label}</button>`).join("");
+}
+const WA_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3z"/></svg>';
+let WA={};
 function sheetCust(id){
   const c=S.customers.find(x=>x.id===id);if(!c)return;S.openCust=id;
   const es=S.entries.filter(e=>e.cust===id).sort((a,b)=>a.date-b.date);
   let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}}).reverse();
   const v=run;
-  const wa=(c.phone||"").replace(/\D/g,"").replace(/^0/,"92");
-  const msg=`السلام علیکم ${c.name}، آپ کے کھاتے میں ${fmt(v)} باقی ہیں۔ براہ کرم ادائیگی کر دیں۔ شکریہ`;
+  WA={remind:[c.phone,waReminder(c,v)],stmt:[c.phone,waStatement(c,rows,v)]};
   openSheet(c.name,`
    <div class="bal-box ${v>0?"owe":v<0?"pay":"zero"}"><div><div class="note">${v>0?"آپ نے لینے ہیں":v<0?"آپ نے دینے ہیں":"حساب برابر ہے"}</div><div class="v ${v>0?"c-owe":v<0?"c-pay":""}">${fmt(Math.abs(v))}</div></div>
      <div class="note"><span class="num">${esc(c.phone||"")}</span><br>${esc(branchName(c.branch))}</div></div>
    ${S.canWrite?(c.kind==="supplier"?`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادائیگی کی</button><button class="btn pay" data-entry="got">مال خریدا (ادھار)</button></div>`:`<div class="two" style="margin-top:12px"><button class="btn owe" data-entry="gave">ادھار دیا / مال دیا</button><button class="btn pay" data-entry="got">رقم ملی</button></div>`):""}
    <div id="entryForm"></div>
    <div class="chips" style="margin:12px 0">
-     ${wa.length>=11&&v>0?`<a class="btn sm" href="https://wa.me/${wa}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">واٹس ایپ یاددہانی</a>`:""}
+     ${waButtons(c.phone,[[c.kind==="supplier"?"حساب کا پیغام":"بقایا یاددہانی","remind"],["پورا کھاتہ بھیجیں","stmt"]])}
      ${S.canWrite?`<button class="btn sm" data-editcust="${esc(c.id)}">ترمیم</button>`:""}
    </div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
@@ -496,7 +527,7 @@ function sheetSale(id){
    <tr><td colspan="3"><strong>کل</strong></td><td class="n num"><strong>${fq(s.total)}</strong></td></tr>
    <tr><td colspan="3">نقد وصول</td><td class="n num">${fq(s.paid)}</td></tr>
    ${s.total>s.paid?`<tr><td colspan="3" class="c-owe">کھاتے میں ادھار</td><td class="n num c-owe">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
-   <div class="actions" style="margin-top:12px"><button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+   <div class="actions" style="margin-top:12px">${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
 }
 
 function sheetPurchase(id){
@@ -506,16 +537,21 @@ function sheetPurchase(id){
    ${(s.lines||[]).map(l=>`<tr><td>${esc(l.name)}</td><td class="n num">${fq(l.qty)}</td><td class="n num">${fq(l.price)}</td><td class="n num">${fq(l.qty*l.price)}</td></tr>`).join("")}
    <tr><td colspan="3"><strong>کل</strong></td><td class="n num"><strong>${fq(s.total)}</strong></td></tr>
    <tr><td colspan="3">نقد ادا کیا</td><td class="n num">${fq(s.paid)}</td></tr>
-   ${s.total>s.paid?`<tr><td colspan="3" class="c-pay">سپلائر کے دینے ہیں</td><td class="n num c-pay">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>`);
+   ${s.total>s.paid?`<tr><td colspan="3" class="c-pay">سپلائر کے دینے ہیں</td><td class="n num c-pay">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
+   <div class="actions" style="margin-top:12px">${(()=>{const c=S.customers.find(x=>x.id===s.supp);WA={bill:[c&&c.phone,waBill(s,true)]};return c&&c.phone?waButtons(c.phone,[["سپلائر کو واٹس ایپ پر بھیجیں","bill"]]):""})()}</div>`);
 }
-function sheetExpense(){
-  openSheet("نیا خرچہ",`<form class="f" data-form="expense">
+const CATS={in:[["پرانا مال / کباڑ فروخت",1],["کمیشن",1],["کرایہ ملا",1],["متفرق آمدنی",1],["مالک نے رقم ڈالی",0],["بینک سے نکالی",0],["قرض ملا",0]],
+  out:[["بجلی کا بل",1],["دکان کا کرایہ",1],["تنخواہ",1],["چائے پانی",1],["گاڑی کرایہ / لوڈنگ",1],["مرمت",1],["متفرق",1],["مالک نے رقم نکالی",0],["بینک میں جمع",0],["قرض واپس کیا",0]]};
+function sheetExpense(dir="out"){
+  const inc=dir==="in";
+  openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
     <div class="two"><div class="fld"><label for="xAmt">رقم</label><input id="xAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
-    <div class="fld"><label for="xCat">خرچے کی قسم</label><input id="xCat" name="cat" list="xCats" required placeholder="مثلاً بجلی کا بل"><datalist id="xCats"><option value="بجلی کا بل"><option value="دکان کا کرایہ"><option value="تنخواہ"><option value="چائے پانی"><option value="گاڑی کرایہ / لوڈنگ"><option value="مرمت"><option value="متفرق"></datalist></div>
+    <div class="fld"><label for="xCat">${inc?"آمد کی قسم":"خرچے کی قسم"}</label><input id="xCat" name="cat" list="xCats" required placeholder="${inc?"مثلاً کباڑ فروخت":"مثلاً بجلی کا بل"}"><datalist id="xCats">${CATS[dir].map(([c])=>`<option value="${c}">`).join("")}</datalist></div>
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
-    <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
+    <p class="note" style="margin:0">${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
+    <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn ${inc?"pay":"owe"}">محفوظ کریں</button></div></form>`);
 }
 
 /* ---------- contacts ---------- */
@@ -571,6 +607,7 @@ document.addEventListener("submit",async ev=>{
     else{const ref={id:newId("customers")};const ops=[{op:"set",col:"customers",id:ref.id,data:{...body,createdAt:Date.now(),...by()}}];
       if(num(d.opening)>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:ref.id,type:body.kind==="supplier"?"got":"gave",amount:num(d.opening),note:"پرانا بقایا",date:Date.now(),branch:body.branch,...by()}});
       ok=await w(()=>db.batch(ops));
+      if(ok&&S.afterCust){const k=S.afterCust;S.afterCust=null;closeSheet();if(k==="customer"){S.saleCust=ref.id;if(S.saleMode==="cash")S.saleLedger=true}else{S.pSupp=ref.id}render();toast((k==="customer"?"گاہک":"سپلائر")+" بن گیا اور بل میں چن لیا");return}
       if(ok){closeSheet();S.kind=body.kind;S.tab="khata";render();sheetCust(ref.id);toast("کھاتہ بن گیا");return}}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
   }
@@ -603,8 +640,9 @@ document.addEventListener("submit",async ev=>{
   if(kind==="expense"){
     const amt=num(d.amount);if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
-    ok=await w(()=>db.add("expenses",{amount:amt,note:d.cat.trim()+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
-    if(ok){closeSheet();toast("خرچہ محفوظ")}
+    const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=CATS[dir].find(([c])=>c===cat);
+    ok=await w(()=>db.add("expenses",{amount:amt,dir,pl:known?!!known[1]:true,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
+    if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="branch"){
     const body={name:d.name.trim(),address:d.address.trim()};
@@ -620,17 +658,19 @@ async function saveSale(){
   const lines=S.cart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,cost:l.cost||0,unit:l.unit||""}));
   if(!lines.length)return;
   const total=lines.reduce((a,l)=>a+l.qty*l.price,0);
-  const paid=S.salePaid===""?total:Math.min(num(S.salePaid),total);
+  const {paid,due}=payCalc("sale",total);
   const cust=S.customers.find(c=>c.id===S.saleCust);
-  if(!cust&&paid<total){toast("ادھار کے لیے گاہک چنیں");return}
+  if(!cust&&due>0){toast("ادھار کے لیے گاہک چنیں");return}
+  const toLedger=cust&&(due>0||S.saleLedger);
   const no=nowId();
   const btn=document.querySelector('[data-act="saveSale"]');if(btn)btn.disabled=true;
   const ref={id:newId("sales")},ops=[{op:"set",col:"sales",id:ref.id,data:{no,branch:bid,cust:cust?cust.id:null,custName:cust?cust.name:"",lines,total,paid,date:Date.now(),...by()}}];
-  if(cust&&total-paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:cust.id,type:"gave",amount:total-paid,note:"بل #"+no,date:Date.now(),branch:bid,...by(),sale:ref.id}});
+  if(toLedger){const t=Date.now();ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:cust.id,type:"gave",amount:total,note:"بل #"+no+" (مال دیا)",date:t,branch:bid,...by(),sale:ref.id}});
+    if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:cust.id,type:"got",amount:paid,note:"بل #"+no+" (نقد وصول)",date:t+1,branch:bid,...by(),sale:ref.id}});}
   for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:-l.qty});
   const ok=await w(()=>db.batch(ops));
   if(!ok){if(btn)btn.disabled=false;return}
-  S.cart=[];S.saleCust="";S.salePaid="";render();toast("بل #"+no+" محفوظ");sheetSale(ref.id);
+  S.cart=[];S.saleCust="";S.salePaid="";S.saleMode="cash";render();toast("بل #"+no+" محفوظ");sheetSale(ref.id);
 }
 
 async function savePurchase(){
@@ -638,23 +678,25 @@ async function savePurchase(){
   const lines=S.pcart.filter(l=>l.qty>0).map(l=>({item:l.item,name:l.name,qty:l.qty,price:l.price,unit:l.unit||""}));
   if(!lines.length)return;
   const total=lines.reduce((a,l)=>a+l.qty*l.price,0);
-  const paid=S.pPaid===""?total:Math.min(num(S.pPaid),total);
+  const {paid,due}=payCalc("purchase",total);
   const sup=S.customers.find(c=>c.id===S.pSupp);
-  if(!sup&&paid<total){toast("ادھار خریداری کے لیے سپلائر چنیں");return}
+  if(!sup&&due>0){toast("ادھار خریداری کے لیے سپلائر چنیں");return}
+  const toLedger=sup&&(due>0||S.pLedger);
   const no="P"+nowId();
   const btn=document.querySelector('[data-act="savePurchase"]');if(btn)btn.disabled=true;
   const ref={id:newId("purchases")},ops=[{op:"set",col:"purchases",id:ref.id,data:{no,branch:bid,supp:sup?sup.id:null,suppName:sup?sup.name:"",lines,total,paid,date:Date.now(),...by()}}];
-  if(sup&&total-paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:total-paid,note:"خریداری #"+no,date:Date.now(),branch:bid,...by(),purchase:ref.id}});
+  if(toLedger){const t=Date.now();ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:total,note:"خریداری #"+no+" (مال آیا)",date:t,branch:bid,...by(),purchase:ref.id}});
+    if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خریداری #"+no+" (نقد ادا)",date:t+1,branch:bid,...by(),purchase:ref.id}});}
   for(const l of lines)if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:bid,delta:l.qty,extra:S.updCost&&l.price>0?{cost:l.price}:{}});
   const ok=await w(()=>db.batch(ops));
   if(!ok){if(btn)btn.disabled=false;return}
-  S.pcart=[];S.pSupp="";S.pPaid="";render();toast("خریداری #"+no+" محفوظ");sheetPurchase(ref.id);
+  S.pcart=[];S.pSupp="";S.pPaid="";S.pMode="cash";render();toast("خریداری #"+no+" محفوظ");sheetPurchase(ref.id);
 }
 function updPTotal(){
   const total=S.pcart.reduce((a,l)=>a+l.qty*l.price,0);const el=$("#pTotal");if(el)el.textContent=fmt(total);
-  const p=$("#pPaid");if(p)p.placeholder=total;
-  const h=$("#pHint");if(!h)return;const paid=S.pPaid===""?total:num(S.pPaid);
-  h.textContent=paid<total?(S.pSupp?`باقی ${fmt(total-paid)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا۔`:`باقی ${fmt(total-paid)} کے لیے سپلائر چنیں۔`):"پوری ادائیگی نقد۔";
+  const h=$("#pHint");if(!h)return;const {paid,due}=payCalc("purchase",total);
+  h.className="pay-hint "+(due>0&&!S.pSupp?"bad":due>0?"due":"ok");
+  h.textContent=due>0?(S.pSupp?`نقد ${fmt(paid)} · باقی ${fmt(due)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا۔`:`ادھار کے لیے اوپر سے سپلائر چنیں یا "+ نیا سپلائر" بنائیں۔`):(S.pSupp&&S.pLedger?`پوری ادائیگی نقد، اور سپلائر کے کھاتے میں بھی ریکارڈ ہوگی۔`:`پوری ادائیگی نقد ${fmt(total)}۔`);
 }
 
 /* ---------- events ---------- */
@@ -667,6 +709,9 @@ document.addEventListener("click",async ev=>{
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
+  if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
+  if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
+  if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
   if(ds.rp){S.rp=ds.rp;render();return}
   if(ds.csv){exportCsv(ds.csv);return}
   if(ds.purv){sheetPurchase(ds.purv);return}
@@ -697,7 +742,8 @@ document.addEventListener("click",async ev=>{
   if(a==="saveSale")saveSale();
   if(a==="clearP"){S.pcart=[];S.pPaid="";render()}
   if(a==="savePurchase")savePurchase();
-  if(a==="newExp")sheetExpense();
+  if(a==="newExp")sheetExpense("out");
+  if(a==="newInc")sheetExpense("in");
   if(a==="copySummary"){try{await navigator.clipboard.writeText(summaryText());toast("کاپی ہو گیا — واٹس ایپ پر پیسٹ کریں")}catch(e){toast("کاپی نہیں ہو سکا")}}
   if(a==="pickNative")pickNative();
   if(a==="showContacts")renderContactBox("");
@@ -727,9 +773,11 @@ document.addEventListener("input",e=>{
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.id==="itemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.cart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.cart.push({item:it.id,name:it.name,qty:1,price:Number(it.sale)||0,cost:Number(it.cost)||0,unit:it.unit});render();$("#itemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
-  if(t.id==="saleCust"){S.saleCust=t.value;updTotal()}
-  if(t.id==="pSupp"){S.pSupp=t.value;updPTotal()}
+  if(t.id==="saleCust"){S.saleCust=t.value;render()}
+  if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
+  if(t.id==="pLedger"){S.pLedger=t.checked;updPTotal()}
   if(t.id==="cashDate"){S.cashDate=t.value;render()}
   if(t.id==="rFrom"){S.rFrom=t.value;render()}
   if(t.id==="rTo"){S.rTo=t.value;render()}
@@ -738,9 +786,9 @@ document.addEventListener("change",e=>{
 });
 function updTotal(){
   const total=S.cart.reduce((a,l)=>a+l.qty*l.price,0);const el=$("#cartTotal");if(el)el.textContent=fmt(total);
-  const p=$("#salePaid");if(p)p.placeholder=total;
-  const h=$("#saleHint");if(!h)return;const paid=S.salePaid===""?total:num(S.salePaid);
-  h.textContent=paid<total?(S.saleCust?`باقی ${fmt(total-paid)} گاہک کے کھاتے میں ادھار لکھا جائے گا۔`:`باقی ${fmt(total-paid)} کے لیے گاہک چنیں۔`):"پورا بل نقد۔";
+  const h=$("#saleHint");if(!h)return;const {mode,paid,due}=payCalc("sale",total);
+  h.className="pay-hint "+(due>0&&!S.saleCust?"bad":due>0?"due":"ok");
+  h.textContent=due>0?(S.saleCust?`نقد ${fmt(paid)} · باقی ${fmt(due)} گاہک کے کھاتے میں ادھار لکھا جائے گا۔`:`ادھار کے لیے اوپر سے گاہک چنیں یا "+ نیا گاہک" بنائیں۔`):(S.saleCust&&S.saleLedger?`پورا بل نقد، اور گاہک کے کھاتے میں بھی ریکارڈ ہوگا۔`:`پورا بل نقد ${fmt(total)}۔`);
 }
 
 window.addEventListener("wb:refreshCust",()=>{if(S.openCust)sheetCust(S.openCust)});

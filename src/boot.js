@@ -109,7 +109,11 @@ export function boot(ctx) {
       me.role = prof.role; me.name = prof.name || me.name; me.branch = prof.branch || "";
       if (prof.role === "pending" || prof.role === "disabled") { waitScreen(prof.role); return; }
       S.canWrite = true; S.isAdmin = prof.role === "owner" || prof.role === "manager"; S.isOwner = prof.role === "owner";
-      const who = document.getElementById("who"); if (who) who.textContent = "· " + me.name + " (" + ROLE[prof.role] + ")";
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set("who", me.name); set("whoRole", ROLE[prof.role]); set("whoAv", (me.name || "?").trim()[0] || "?");
+      const chip = document.getElementById("whoChip"); if (chip) chip.hidden = false;
+      try { set("todayStr", new Date().toLocaleDateString("ur-PK", { weekday: "long", day: "numeric", month: "long" })); } catch (e) {}
+      shopInfo().then(sh => { if (sh && sh.name) { S.shopName = sh.name; set("shopName", sh.name); } });
       if (!started) {
         started = true;
         if (me.branch) { try { if (!localStorage.getItem("hk_branch")) S.branch = me.branch; } catch (e) { S.branch = me.branch; } }

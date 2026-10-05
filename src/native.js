@@ -27,3 +27,14 @@ export async function saveFile(filename, text, mime) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
+
+// Open WhatsApp with a ready message. Pakistani numbers like 0300-1234567 become 923001234567.
+export function openWhatsApp(phone, text) {
+  let n = String(phone || "").replace(/\D/g, "");
+  if (n.startsWith("00")) n = n.slice(2);
+  if (n.startsWith("0")) n = "92" + n.slice(1);
+  else if (n.length === 10 && n.startsWith("3")) n = "92" + n;
+  const url = "https://wa.me/" + n + "?text=" + encodeURIComponent(text);
+  if (isNative) window.location.href = url;          // Android hands wa.me links to the WhatsApp app
+  else window.open(url, "_blank", "noopener");
+}

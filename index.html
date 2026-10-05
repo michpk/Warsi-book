@@ -22,9 +22,15 @@ body{margin:0}img{max-width:100%}[hidden]{display:none!important}
 <body>
 <div id="app" dir="rtl" lang="ur">
   <header class="top"><div class="top-in">
-    <h1 class="brand">وارثی بک<small id="who"></small></h1>
+    <div class="brand-wrap">
+      <img class="logo" src="icon-192.png" alt="" width="44" height="44">
+      <div class="brand-text"><h1 class="brand">وارثی بک</h1><div class="brand-sub"><span id="shopName">ہارڈویئر کھاتہ</span><span class="dot" aria-hidden="true">•</span><span id="todayStr"></span></div></div>
+    </div>
     <div class="spacer"></div>
-    <div class="branch-pick"><label for="branchSel">برانچ</label><select id="branchSel"></select></div>
+    <div class="hdr-tools">
+      <div class="branch-pick"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 21V9l8-5 8 5v12M9 21v-6h6v6"/></svg><label for="branchSel" class="sr">برانچ</label><select id="branchSel"></select></div>
+      <div class="who" id="whoChip" hidden><span class="who-av" id="whoAv"></span><span class="who-txt"><b id="who"></b><small id="whoRole"></small></span></div>
+    </div>
   </div></header>
   <div class="shell">
     <nav class="tabs" id="tabs" aria-label="حصے"></nav>
