@@ -475,8 +475,9 @@ function sheetCust(id){
      ${S.canWrite?`<button class="btn sm" data-editcust="${esc(c.id)}">ترمیم</button>`:""}
    </div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
-   ${rows.map(e=>`<div class="led-row"><div style="min-width:0"><div>${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
+   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
+   ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
 }
 function entryFormHtml(type){
@@ -484,6 +485,7 @@ function entryFormHtml(type){
     <div class="two"><div class="fld"><label for="eAmt">${(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier"?(type==="gave"?"کتنی ادائیگی کی":"کتنے کا مال ملا"):(type==="gave"?"کتنے کا ادھار":"کتنی رقم ملی")}</label><input id="eAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="eDate">تاریخ</label><input id="eDate" name="date" type="date" value="${new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)}"></div></div>
     <div class="fld"><label for="eNote">تفصیل</label><input id="eNote" name="note" placeholder="${type==="gave"?"مثلاً 10 بیگ سیمنٹ":"مثلاً نقد / بینک ٹرانسفر"}"></div>
+    ${photoPicker()}
     <div class="actions"><button type="button" class="btn" data-cancelentry>منسوخ</button><button class="btn ${type==="gave"?"owe":"pay"}">محفوظ کریں</button></div></form>`;
 }
 function sheetItemForm(it){
@@ -588,6 +590,18 @@ function sheetExpView(id){
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
 }
+function sheetEntryView(id){
+  const e=S.entries.find(x=>x.id===id);if(!e)return;const c=S.customers.find(x=>x.id===e.cust)||{},sup=c.kind==="supplier",att=e.att||[];
+  const label=e.note||(sup?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی"));
+  S.openCust=null;
+  openSheet(c.name||"اندراج",`
+    <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
+    <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
+    <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
+    ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
+    <div class="actions" style="margin-top:14px"><button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
+  for(const a of att)loadAtt(a);
+}
 const ATT={};
 async function loadAtt(id){
   const box=document.querySelector(`[data-att="${CSS.escape(id)}"]`);if(!box)return;
@@ -672,7 +686,8 @@ document.addEventListener("submit",async ev=>{
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
     if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
-    ok=await w(()=>db.add("entries",{cust:S.openCust,type:f.dataset.type,amount:amt,note:d.note.trim(),date:dt,branch:c?c.branch:"",...by()}));
+    const att=savePhotos({kind:"entry",cust:S.openCust});
+    ok=await w(()=>db.add("entries",{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...by()}));
     if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
   }
   if(kind==="item"){
@@ -703,9 +718,10 @@ document.addEventListener("submit",async ev=>{
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="addphoto"){
-    const x=S.expenses.find(e=>e.id===id);if(!x||!(S.photos||[]).length){toast("پہلے تصویر چنیں");if(btn)btn.disabled=false;return}
-    const att=[...(x.att||[]),...savePhotos({kind:"expense",ref:id})].slice(0,MAX_PHOTOS);
-    ok=await w(()=>db.update("expenses",id,{att}));if(ok){toast("تصویر محفوظ");sheetExpView(id)}
+    const col=f.dataset.col==="entries"?"entries":"expenses",x=S[col].find(e=>e.id===id);
+    if(!x||!(S.photos||[]).length){toast("پہلے تصویر چنیں");if(btn)btn.disabled=false;return}
+    const att=[...(x.att||[]),...savePhotos({kind:col==="entries"?"entry":"expense",ref:id})].slice(0,MAX_PHOTOS);
+    ok=await w(()=>db.update(col,id,{att}));if(ok){toast("تصویر محفوظ");col==="entries"?sheetEntryView(id):sheetExpView(id)}
   }
   if(kind==="branch"){
     const body={name:d.name.trim(),address:d.address.trim()};
@@ -772,6 +788,7 @@ document.addEventListener("click",async ev=>{
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
+  if(ds.backcust){sheetCust(ds.backcust);return}
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
@@ -793,7 +810,7 @@ document.addEventListener("click",async ev=>{
   if(ds.edititem){sheetItemForm(S.items.find(c=>c.id===ds.edititem));return}
   if(ds.editbranch){sheetBranch(S.branches.find(c=>c.id===ds.editbranch));return}
   if(ds.setbranch){S.branch=ds.setbranch;try{localStorage.setItem("hk_branch",S.branch)}catch(e){};S.tab="home";render();return}
-  if(ds.entry){$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
+  if(ds.entry){S.photos=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
   if(ds.delentry){const box=$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=`<div class="confirm">یہ اندراج حذف کریں؟<button class="btn owe sm" data-delyes="${esc(ds.delentry)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
   if(ds.delyes){if(await w(()=>db.remove("entries",ds.delyes))){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
@@ -822,8 +839,8 @@ document.addEventListener("pointermove",e=>{
   const r=wrap.getBoundingClientRect();tip.textContent=g.dataset.tip;tip.style.left=(e.clientX-r.left+wrap.scrollLeft)+"px";tip.style.top=(e.clientY-r.top)+"px";tip.hidden=false;
   const b=g.querySelector(".bar");if(b)b.classList.add("on");
 });
-document.addEventListener("click",e=>{const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
-document.addEventListener("keydown",e=>{if(e.key==="Enter"){const r=e.target.closest&&e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv)}});
+document.addEventListener("click",e=>{if(e.target.closest("button"))return;const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.closest){const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv)}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#sheet").hidden)closeSheet()});
 $("#branchSel").addEventListener("change",e=>{S.branch=e.target.value;try{localStorage.setItem("hk_branch",S.branch)}catch(x){};render()});
