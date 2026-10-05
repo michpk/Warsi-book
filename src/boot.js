@@ -7,7 +7,7 @@ export function boot(ctx) {
   const show = html => { authEl.innerHTML = `<div class="auth-card">${html}</div>`; authEl.hidden = false; };
   const hide = () => { authEl.hidden = true; authEl.innerHTML = ""; };
   const ROLE = { owner: "مالک", manager: "مینیجر", staff: "ملازم", pending: "منظوری باقی", disabled: "بند" };
-  const brand = `<div class="auth-brand">وارثی بک</div>`;
+  const brand = `<img class="auth-logo" src="logo.png" alt="Warsi Hardware"><div class="auth-brand">وارثی بک</div><p class="auth-tag">Care Your Dreams</p>`;
 
   if (!configured) {
     show(`${brand}<p>ایپ ابھی Firebase سے جڑی نہیں۔ <code>src/config.js</code> میں Firebase کی سیٹنگ ڈالیں۔</p>`);

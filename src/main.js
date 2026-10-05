@@ -542,15 +542,29 @@ function sheetPurchase(id){
 }
 const CATS={in:[["پرانا مال / کباڑ فروخت",1],["کمیشن",1],["کرایہ ملا",1],["متفرق آمدنی",1],["مالک نے رقم ڈالی",0],["بینک سے نکالی",0],["قرض ملا",0]],
   out:[["بجلی کا بل",1],["دکان کا کرایہ",1],["تنخواہ",1],["چائے پانی",1],["گاڑی کرایہ / لوڈنگ",1],["مرمت",1],["متفرق",1],["مالک نے رقم نکالی",0],["بینک میں جمع",0],["قرض واپس کیا",0]]};
+/* built-in categories plus any the shop has typed before, newest first */
+function catList(dir){
+  const out=CATS[dir].map(([c,pl])=>[c,!!pl,false]),seen=new Set(out.map(x=>x[0]));
+  for(const x of [...S.expenses].filter(x=>(x.dir==="in"?"in":"out")===dir).sort((a,b)=>b.date-a.date)){const c=expCat(x);if(c&&!seen.has(c)){seen.add(c);out.push([c,x.pl!==false,true])}}
+  return out;
+}
+function syncCat(){
+  const v=($("#xCat")||{}).value||"",chips=document.querySelectorAll("#catChips [data-cat]");let hit=null;
+  chips.forEach(b=>{const on=b.dataset.cat===v.trim();b.setAttribute("aria-pressed",on);if(on)hit=b});
+  const row=$("#plRow"),cb=$("#xPl");if(row)row.hidden=!!hit;if(cb&&hit)cb.checked=hit.dataset.pl==="1";
+}
 function sheetExpense(dir="out"){
   const inc=dir==="in";
   openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
     <div class="two"><div class="fld"><label for="xAmt">رقم</label><input id="xAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
-    <div class="fld"><label for="xCat">${inc?"آمد کی قسم":"خرچے کی قسم"}</label><input id="xCat" name="cat" list="xCats" required placeholder="${inc?"مثلاً کباڑ فروخت":"مثلاً بجلی کا بل"}"><datalist id="xCats">${CATS[dir].map(([c])=>`<option value="${c}">`).join("")}</datalist></div>
+    <div class="fld"><span class="lbl-sm">${inc?"آمد کی قسم":"خرچے کی قسم"}</span>
+      <div class="cat-chips" id="catChips">${catList(dir).map(([c,pl,own])=>`<button type="button" class="${own?"own":""}" data-cat="${esc(c)}" data-pl="${pl?1:0}" aria-pressed="false">${esc(c)}</button>`).join("")}</div></div>
+    <div class="fld"><label for="xCat">یا نئی قسم لکھیں</label><input id="xCat" name="cat" required placeholder="${inc?"مثلاً پرانی مشین فروخت":"مثلاً موبائل بیلنس"}" autocomplete="off"></div>
+    <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> یہ ${inc?"آمدنی":"خرچہ"} منافع کے حساب میں شامل ہو</label>
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
-    <p class="note" style="margin:0">${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
+    <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn ${inc?"pay":"owe"}">محفوظ کریں</button></div></form>`);
 }
 
@@ -640,8 +654,8 @@ document.addEventListener("submit",async ev=>{
   if(kind==="expense"){
     const amt=num(d.amount);if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
-    const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=CATS[dir].find(([c])=>c===cat);
-    ok=await w(()=>db.add("expenses",{amount:amt,dir,pl:known?!!known[1]:true,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
+    const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=catList(dir).find(([c])=>c===cat);
+    ok=await w(()=>db.add("expenses",{amount:amt,dir,pl:known?known[1]:!!d.pl,note:cat+(d.note.trim()?" · "+d.note.trim():""),date:dt,branch:d.branch||"",...by()}));
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="branch"){
@@ -709,6 +723,7 @@ document.addEventListener("click",async ev=>{
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
+  if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
@@ -769,6 +784,7 @@ document.addEventListener("input",e=>{
   if(t.dataset.pp!==undefined){S.pcart[+t.dataset.pp].price=num(t.value);updPTotal()}
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
+  if(t.id==="xCat")syncCat();
 });
 document.addEventListener("change",e=>{
   const t=e.target;
