@@ -292,9 +292,12 @@ form.f{display:flex;flex-direction:column;gap:12px}
 #catMore{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:13px;margin-top:6px;align-self:flex-start;max-width:100%}
 .calc-wrap{position:relative}.calc-wrap input{padding-left:46px!important}
 .calc-btn{position:absolute;left:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:8px;background:var(--accent-2);color:var(--accent);display:grid;place-items:center;cursor:pointer}
-.calc-res{font-family:var(--f-num);font-size:13px;color:var(--accent);min-height:0;direction:ltr;text-align:right}.calc-res:empty{display:none}.calc-res.bad{color:var(--owe)}
+.calc-res{font-family:var(--f-num);font-size:14px;font-weight:600;color:var(--accent-fg);background:var(--accent);border:0;border-radius:8px;padding:8px 12px;margin-top:6px;cursor:pointer;direction:ltr;text-align:center;width:100%}.calc-res:empty{display:none}.calc-res.bad{background:var(--owe-bg)}.calc-res.bad{color:var(--owe)}
 .calc-pad{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);direction:ltr}
 .calc-pad[hidden]{display:none}
 .calc-pad button{height:42px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-family:var(--f-num);font-size:18px;cursor:pointer}
 .calc-pad button.op{background:var(--accent-2);color:var(--accent);font-weight:700}.calc-pad button.fn{color:var(--owe)}
 .calc-pad button[data-ck="="]{background:var(--accent);color:var(--accent-fg)}
+.sugg{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:4px;overflow:hidden;box-shadow:var(--shadow)}
+.sugg[hidden]{display:none}.sugg button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 12px;text-align:start;cursor:pointer;font-size:14px}
+.sugg button:hover{background:var(--sunk)}.sugg-new{padding:8px 12px;font-size:13px;color:var(--accent);background:var(--accent-2)}
