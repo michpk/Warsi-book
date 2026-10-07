@@ -23,7 +23,7 @@ async function bioPrompt() {
 
 const FP = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 11v3a8 8 0 0 1-1 4M8 11a4 4 0 0 1 8 0v2M5 11a7 7 0 0 1 14 0v3M16 15a12 12 0 0 1-1 5M9 21a14 14 0 0 0 1-4"/></svg>';
 
-export function createLock({ onForgot }) {
+export function createLock({ onForgot, onRelock }) {
   let uid = null, el = null, buf = "", first = null, mode = "unlock", tries = 0, hiddenAt = 0, open = false, resolveOpen = null, bioOn = false;
 
   function render(msg = "", err = false) {
@@ -32,7 +32,7 @@ export function createLock({ onForgot }) {
     el.innerHTML = `<div class="lock-box" role="dialog" aria-modal="true" aria-label="ایپ لاک">
       <img src="logo.png" alt="">
       <h2>${title}</h2>
-      <p class="${err ? "err" : ""}">${msg || (mode === "set" ? "ہر بار ایپ کھولنے پر یہ PIN پوچھا جائے گا۔" : "")}</p>
+      <p class="${err ? "err" : ""}">${msg || (mode === "set" ? "ہر بار ایپ کھولنے پر یہ PIN پوچھا جائے گا۔" : (window.matchMedia && matchMedia("(pointer:fine)").matches ? "کی بورڈ سے بھی لکھ سکتے ہیں" : ""))}</p>
       <div class="pin-dots" aria-hidden="true">${[0, 1, 2, 3].map(i => `<i class="${i < buf.length ? "on" : ""}"></i>`).join("")}</div>
       <div class="keypad">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button data-k="${n}" aria-label="${n}">${n}</button>`).join("")}
         <button class="k-fn" data-k="bio" ${mode === "unlock" && bioOn ? "" : "style=\"visibility:hidden\""} aria-label="فنگر پرنٹ">${FP}</button>
@@ -81,10 +81,19 @@ export function createLock({ onForgot }) {
     return new Promise(r => { resolveOpen = r; });
   }
 
+  document.addEventListener("keydown", ev => {
+    if (!open || !el || el.hidden) return;
+    let k = null;
+    if (/^[0-9]$/.test(ev.key)) k = ev.key;
+    else if (ev.key === "Backspace" || ev.key === "Delete") k = "del";
+    if (k == null) return;
+    ev.preventDefault();
+    const btn = el.querySelector(`[data-k="${k}"]`); if (btn) btn.click();
+  });
   document.addEventListener("visibilitychange", () => {
     if (!uid) return;
     if (document.hidden) hiddenAt = Date.now();
-    else if (!open && hiddenAt && Date.now() - hiddenAt > RELOCK_AFTER && load(uid)) show("unlock");
+    else if (!open && hiddenAt && Date.now() - hiddenAt > RELOCK_AFTER && load(uid)) { if (onRelock) onRelock(); show("unlock"); }
   });
 
   return {

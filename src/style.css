@@ -303,3 +303,5 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .sugg button:hover{background:var(--sunk)}.sugg-new{padding:8px 12px;font-size:13px;color:var(--accent);background:var(--accent-2)}
 .own-box{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
 .bad-txt{color:var(--owe)!important}
+button.stat.tile{font:inherit;color:inherit;text-align:start;cursor:pointer;border:1px solid var(--line)}
+button.stat.tile:hover{border-color:var(--accent)}

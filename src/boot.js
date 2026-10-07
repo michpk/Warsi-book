@@ -15,7 +15,7 @@ export function boot(ctx) {
     const inp = b.parentElement.querySelector("input"); const show = inp.type === "password";
     inp.type = show ? "text" : "password"; b.innerHTML = show ? EYE_OFF : EYE; b.setAttribute("aria-pressed", show); b.setAttribute("aria-label", show ? "پاس ورڈ چھپائیں" : "پاس ورڈ دکھائیں"); inp.focus();
   });
-  const lock = createLock({ onForgot: () => { lock.reset(); authApi.signOut(); } });
+  const lock = createLock({ onForgot: () => { lock.reset(); authApi.signOut(); }, onRelock: () => { S.tab = "home"; const sh = document.getElementById("sheet"); if (sh && !sh.hidden) { sh.hidden = true; sh.innerHTML = ""; } S.openCust = null; render(); window.scrollTo(0, 0); } });
   let unlockedFor = null;
   const brand = `<img class="auth-logo" src="logo.png" alt="Warsi Hardware"><div class="auth-brand">وارثی بک</div><p class="auth-tag">Care Your Dreams</p>`;
 
