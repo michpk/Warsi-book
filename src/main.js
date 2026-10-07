@@ -609,7 +609,8 @@ function sheetCust(id){
    <div class="chips" style="margin:12px 0">
      ${waButtons(c.phone,[[c.kind==="supplier"?"حساب کا پیغام":"بقایا یاددہانی","remind"],["پورا کھاتہ بھیجیں","stmt"]])}
      ${S.canWrite?`<button class="btn sm" data-editcust="${esc(c.id)}">ترمیم</button>`:""}
-   </div>
+     ${S.isAdmin?`<button class="btn sm danger" data-delcust="${esc(c.id)}">کھاتہ حذف کریں</button>`:""}
+   </div><div id="delCustBox"></div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
    ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
@@ -1098,6 +1099,20 @@ document.addEventListener("click",async ev=>{
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
+  if(ds.delcust){
+    const c=S.customers.find(x=>x.id===ds.delcust);if(!c)return;const n=S.entries.filter(e=>e.cust===c.id).length,v=balances()[c.id]||0,sup=c.kind==="supplier";
+    $("#delCustBox").innerHTML=`<div class="del-box"><b>${esc(c.name)} کا کھاتہ حذف کریں؟</b>
+      <p>${n} اندراجات بھی ساتھ حذف ہو جائیں گے۔${v?` <span class="c-owe">اس کھاتے میں ابھی ${fmt(Math.abs(v))} ${v>0?(sup?"سپلائر کے ذمے":"لینے"):(sup?"دینے":"گاہک کے")} باقی ہیں۔</span>`:" حساب برابر ہے۔"}</p>
+      <p class="note" style="margin:0">پرانے بل اور رپورٹس میں نام ویسے ہی رہے گا۔ یہ کام واپس نہیں ہو سکتا۔</p>
+      <div class="actions"><button class="btn sm" data-delcustno>نہیں</button><button class="btn sm owe" data-delcustyes="${esc(c.id)}">ہاں، حذف کریں</button></div></div>`;
+    $("#delCustBox").scrollIntoView({behavior:"smooth",block:"center"});return}
+  if("delcustno" in ds){$("#delCustBox").innerHTML="";return}
+  if(ds.delcustyes){
+    const id=ds.delcustyes,c=S.customers.find(x=>x.id===id),ents=S.entries.filter(e=>e.cust===id);t.disabled=true;
+    const ops=[{op:"update",col:"customers",id,data:{del:true}},...ents.map(e=>({op:"update",col:"entries",id:e.id,data:{del:true}}))];
+    let ok=true;for(let i=0;i<ops.length&&ok;i+=400)ok=await w(()=>db.batch(ops.slice(i,i+400)));
+    if(ok){closeSheet();toast((c?c.name:"کھاتہ")+" حذف ہو گیا")}else t.disabled=false;
+    return}
   if(ds.backcust){sheetCust(ds.backcust);return}
   if(ds.billpdf){const x=S.sales.find(v=>v.id===ds.billpdf);if(x)busy(t,()=>billPdf(x));return}
   if(ds.purpdf){const x=S.purchases.find(v=>v.id===ds.purpdf);if(x)busy(t,()=>billPdf(x,true));return}

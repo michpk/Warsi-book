@@ -325,3 +325,5 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .bad-txt{color:var(--owe)!important}
 button.stat.tile{font:inherit;color:inherit;text-align:start;cursor:pointer;border:1px solid var(--line)}
 button.stat.tile:hover{border-color:var(--accent)}
+.btn.danger{color:var(--owe);border-color:var(--owe-bg);background:var(--surface)}.btn.danger:hover{background:var(--owe-bg);border-color:var(--owe)}
+.del-box{border:1px solid var(--owe);background:var(--owe-bg);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.del-box p{margin:0;font-size:14px}
