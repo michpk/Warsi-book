@@ -807,6 +807,8 @@ function sheetExpView(id){
     ${x.suppName?`<div class="qr-row" style="margin-top:10px"><div><b>سپلائر: ${esc(x.suppName)}</b><div class="note">${x.paid!=null&&x.paid<x.amount?`نقد ${fmt(x.paid)} · ادھار ${fmt(x.amount-x.paid)} (سپلائر کے کھاتے میں)`:"پوری رقم نقد دی گئی"}</div>${x.supp?`<button class="btn sm" data-cust="${esc(x.supp)}">سپلائر کا کھاتہ کھولیں</button>`:""}</div></div>`:""}
     ${x.own?`<p class="note">اس میں سے <b>${fmt(x.own)}</b> اپنی جیب سے دیے گئے (مالک نے رقم ڈالی)۔</p>`:""}
     ${x.ownFor?`<p class="note">یہ رقم ایک خرچے کے لیے اپنی جیب سے ڈالی گئی تھی۔</p>`:""}
+    ${x.tillSale?`<p class="note">اس میں سے <b>${fmt(x.tillSale)}</b> گلّے کی سیل سے دیے گئے، اور یہ رقم آج کی فروخت میں شمار ہوئی۔</p>`:""}
+    ${x.saleFor?`<p class="note">یہ رقم گلّے کی سیل سے ایک خرچے کی ادائیگی میں گئی، اس لیے فروخت میں شمار ہوئی۔</p>`:""}
     ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
     ${inc?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
@@ -855,6 +857,7 @@ function suggSupp(){
   box.innerHTML=hits.map(c=>`<button type="button" data-pickss="${esc(c.name)}">${esc(c.name)}${c.phone?` <span class="note num">${esc(c.phone)}</span>`:""}</button>`).join("")+(v&&!list.some(c=>(c.name||"").toLowerCase()===v)?`<div class="sugg-new">+ "${esc((($("#xSupp")||{}).value||"").trim())}" نیا سپلائر بنے گا</div>`:"");
   box.hidden=!box.innerHTML;
 }
+function tillSalePref(){try{return localStorage.getItem("wb_tillsale")!=="0"}catch(e){return true}}
 function syncOwn(){
   const h=$("#xOwnHint");if(!h)return;const own=num(($("#xOwn")||{}).value);
   const amt=calcEval(($("#xAmt")||{}).value)||0,v=(($("#xSupp")||{}).value||"").trim(),led=v&&($("#xLedger")||{}).checked;
@@ -863,6 +866,7 @@ function syncOwn(){
   h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ خود \"مالک نے رقم ڈالی\" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔"
     :own>cash?`اپنی جیب کی رقم نقد ادائیگی (${fmt(cash)}) سے زیادہ نہیں ہو سکتی۔`
     :`گلّے سے ${fmt(cash-own)} گیا · اپنی جیب سے ${fmt(own)} (یہ "مالک نے رقم ڈالی" کی آمد میں درج ہوگا)`;
+  const th=$("#xTillHint");if(th&&$("#xTillSale").checked&&cash-own>0&&own<=cash)th.textContent=`${fmt(cash-own)} آج کی فروخت میں جڑ جائے گا۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔`;
 }
 function syncExpSupp(){
   const v=(($("#xSupp")||{}).value||"").trim(),more=$("#xSuppMore");if(!more)return;more.hidden=!v;
@@ -899,7 +903,8 @@ function sheetExpense(dir="out"){
       </div>
     </div>
     <div class="own-box"><div class="fld"><label for="xOwn">نقد میں سے کتنا اپنی جیب سے دیا؟ (اختیاری)</label><input id="xOwn" name="own" class="num" inputmode="decimal" placeholder="0 — سب گلّے سے دیا"></div>
-      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ خود "مالک نے رقم ڈالی" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔</p></div>`}
+      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ خود "مالک نے رقم ڈالی" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔</p>
+      <label class="sale-toggle"><input type="checkbox" id="xTillSale" name="tillsale" ${tillSalePref()?"checked":""}> <span><b>گلّے سے دی گئی رقم آج کی فروخت میں شمار کریں</b><small id="xTillHint">گلّے میں جو پیسہ تھا وہ آج کی سیل کا تھا، اس لیے یہ رقم "فروخت" میں بھی جڑ جائے گی۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔</small></span></label></div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
@@ -1012,6 +1017,9 @@ document.addEventListener("submit",async ev=>{
     if(own>paid){toast("اپنی جیب کی رقم نقد ادائیگی سے زیادہ نہیں ہو سکتی");if(btn)btn.disabled=false;return}
     if(own>0)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:own,dir:"in",pl:false,sale:false,att:[],note:"مالک نے رقم ڈالی · "+cat+(sname?" ("+sname+")":"")+" کے لیے",date:dt-1,branch:d.branch||"",ownFor:xid,...by()}});
     if(own>0)ops.find(o=>o.id===xid).data.own=own;
+    const till=dir==="out"&&d.tillsale?Math.max(0,paid-own):0;
+    try{if(dir==="out")localStorage.setItem("wb_tillsale",d.tillsale?"1":"0")}catch(e){}
+    if(till>0){ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:till,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · "+cat+(sname?" ("+sname+")":"")+" کو ادا کی",date:dt-2,branch:d.branch||"",saleFor:xid,...by()}});ops.find(o=>o.id===xid).data.tillSale=till}
     ok=await w(()=>db.batch(ops));
     if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":own>0?"خرچہ اور اپنی جیب کی رقم محفوظ":"خرچہ محفوظ")}
   }
@@ -1114,7 +1122,7 @@ document.addEventListener("click",async ev=>{
   if(ds.prm){S.pcart.splice(+ds.prm,1);render();return}
   if(ds.pickc){fillContact(S.contacts[+ds.pickc]);return}
   if(ds.delexp){const box=$("#dx_"+CSS.escape(ds.delexp));if(box)box.innerHTML=`<div class="confirm">یہ خرچہ حذف کریں؟<button class="btn owe sm" data-delexpyes="${esc(ds.delexp)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
-  if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);for(const x of S.expenses.filter(x=>x.ownFor===id))db.remove("expenses",x.id);closeSheet();toast("حذف ہو گیا")}return}
+  if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);for(const x of S.expenses.filter(x=>x.ownFor===id||x.saleFor===id))db.remove("expenses",x.id);closeSheet();toast("حذف ہو گیا")}return}
   if(ds.cust){sheetCust(ds.cust);return}
   if(ds.item){sheetItem(ds.item);return}
   if(ds.salev){sheetSale(ds.salev);return}
@@ -1189,6 +1197,7 @@ document.addEventListener("change",e=>{
   if(t.id==="updCost")S.updCost=t.checked;
   if(t.id==="catMore"&&t.value){const inp=$("#xCat");inp.value=t.value;syncCat()}
   if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
+  if(t.id==="xTillSale")syncOwn();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
