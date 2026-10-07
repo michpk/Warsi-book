@@ -730,15 +730,52 @@ function sheetPurchase(id){
 const CATS={in:[["پرانا مال / کباڑ فروخت",1],["کمیشن",1],["کرایہ ملا",1],["متفرق آمدنی",1],["مالک نے رقم ڈالی",0],["بینک سے نکالی",0],["قرض ملا",0]],
   out:[["بجلی کا بل",1],["دکان کا کرایہ",1],["تنخواہ",1],["چائے پانی",1],["گاڑی کرایہ / لوڈنگ",1],["مرمت",1],["متفرق",1],["مالک نے رقم نکالی",0],["بینک میں جمع",0],["قرض واپس کیا",0]]};
 /* built-in categories plus any the shop has typed before, newest first */
+function catTop(dir,n=5){
+  const all=catList(dir),cnt={};
+  for(const x of S.expenses)if((x.dir==="in"?"in":"out")===dir){const c=expCat(x);cnt[c]=(cnt[c]||0)+1}
+  const order=all.map((c,i)=>[c,cnt[c[0]]||0,i]).sort((a,b)=>b[1]-a[1]||a[2]-b[2]).map(x=>x[0]);
+  return {top:order.slice(0,n),rest:order.slice(n)};
+}
 function catList(dir){
   const out=CATS[dir].map(([c,pl])=>[c,!!pl,false]),seen=new Set(out.map(x=>x[0]));
   for(const x of [...S.expenses].filter(x=>(x.dir==="in"?"in":"out")===dir).sort((a,b)=>b.date-a.date)){const c=expCat(x);if(c&&!seen.has(c)){seen.add(c);out.push([c,x.pl!==false,true])}}
   return out;
 }
 function syncCat(){
-  const v=($("#xCat")||{}).value||"",chips=document.querySelectorAll("#catChips [data-cat]");let hit=null;
-  chips.forEach(b=>{const on=b.dataset.cat===v.trim();b.setAttribute("aria-pressed",on);if(on)hit=b});
-  const row=$("#plRow"),cb=$("#xPl");if(row)row.hidden=!!hit;if(cb&&hit)cb.checked=hit.dataset.pl==="1";
+  const v=(($("#xCat")||{}).value||"").trim();
+  document.querySelectorAll("#catChips [data-cat]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.cat===v));
+  const hit=catList(S.xDir||"out").find(([c])=>c===v),more=$("#catMore");
+  if(more)more.value=[...more.options].some(o=>o.value===v)?v:"";
+  const row=$("#plRow"),cb=$("#xPl");if(row)row.hidden=!!hit;if(cb&&hit)cb.checked=hit[1];
+}
+/* ---------- calculator for amount fields ---------- */
+/* safe arithmetic: digits . + - × ÷ ( ) only */
+function calcEval(src){
+  const t=String(src||"").replace(/[,\s]/g,"").replace(/×|x/gi,"*").replace(/÷/g,"/").replace(/−/g,"-");
+  if(!t)return 0;if(!/^[\d.+\-*/()]+$/.test(t))return NaN;
+  let i=0;const peek=()=>t[i],eat=c=>t[i]===c&&++i;
+  const num_=()=>{if(eat("(")){const v=expr();eat(")");return v}if(eat("-"))return -num_();if(eat("+"))return num_();let st=i;while(/[\d.]/.test(t[i]||""))i++;return parseFloat(t.slice(st,i))};
+  const term=()=>{let v=num_();for(;;){if(eat("*"))v*=num_();else if(eat("/"))v/=num_();else return v}};
+  const expr=()=>{let v=term();for(;;){if(eat("+"))v+=term();else if(eat("-"))v-=term();else return v}};
+  const v=expr();return i===t.length&&isFinite(v)?Math.round(v*100)/100:NaN;
+}
+const CALC_ICON='<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8M8 11h2M14 11h2M8 15h2M14 15h2M8 19h2M14 19h2"/></svg>';
+function calcField(id,name){
+  return `<div class="calc-wrap"><input id="${id}" name="${name}" class="num" inputmode="decimal" required autocomplete="off" data-calc placeholder="مثلاً 1500+250"><button type="button" class="calc-btn" data-calcbtn="${id}" aria-label="کیلکولیٹر">${CALC_ICON}</button></div>
+    <div class="calc-res" id="${id}Res"></div>
+    <div class="calc-pad" id="${id}Pad" hidden>${["7","8","9","÷","4","5","6","×","1","2","3","−","0",".","⌫","+","C","(",")","="].map(k=>`<button type="button" data-ck="${k}" data-for="${id}" class="${/[÷×−+=]/.test(k)?"op":k==="C"||k==="⌫"?"fn":""}">${k}</button>`).join("")}</div>`;
+}
+function calcShow(id){
+  const inp=$("#"+id),res=$("#"+id+"Res");if(!inp||!res)return;const v=inp.value.trim();
+  if(!/[+\-×÷*/x−()]/.test(v.replace(/^-/,""))){res.textContent="";return}
+  const r=calcEval(v);res.textContent=isNaN(r)?"حساب درست نہیں":"= "+fmt(r);res.classList.toggle("bad",isNaN(r));
+}
+function calcKey(id,k){
+  const inp=$("#"+id);if(!inp)return;
+  if(k==="C")inp.value="";else if(k==="⌫")inp.value=inp.value.slice(0,-1);
+  else if(k==="="){const r=calcEval(inp.value);if(!isNaN(r))inp.value=String(r)}
+  else inp.value+=k;
+  calcShow(id);inp.dispatchEvent(new Event("input",{bubbles:true}));
 }
 /* ---------- bill photos ---------- */
 const CLIP_ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>';
@@ -815,18 +852,19 @@ function syncExpSupp(){
   const led=$("#xLedger").checked;$("#xLedOpts").hidden=!led;$("#xNewPhoneRow").hidden=!!ex||!v;
   document.querySelectorAll("[data-xm]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.xm===S.xMode));
   $("#xPaidRow").hidden=S.xMode!=="part";
-  const amt=num(($("#xAmt")||{}).value),paid=S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
+  const amt=calcEval(($("#xAmt")||{}).value)||0,paid=S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
   $("#xSuppHint").textContent=!led?"":(ex?"":`"${v}" نام کا نیا سپلائر کھاتہ بن جائے گا۔ `)+(amt?(amt-paid>0?`${fmt(amt-paid)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا${paid?`، نقد ${fmt(paid)} روزنامچہ میں جائے گا`:""}۔`:`پوری رقم نقد دی گئی۔ کھاتے میں ریکارڈ رہے گا، بقایا نہیں بنے گا۔`):"");
 }
 function sheetExpense(dir="out"){
-  const inc=dir==="in";S.photos=[];S.xMode="cash";
+  const inc=dir==="in";S.photos=[];S.xMode="cash";S.xDir=dir;
   openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
-    <div class="two"><div class="fld"><label for="xAmt">رقم</label><input id="xAmt" name="amount" class="num" inputmode="decimal" required></div>
+    <div class="two"><div class="fld"><label for="xAmt">رقم</label>${calcField("xAmt","amount")}</div>
     <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
     <div class="fld"><span class="lbl-sm">${inc?"آمد کی قسم":"خرچے کی قسم"}</span>
-      <div class="cat-chips" id="catChips">${catList(dir).map(([c,pl,own])=>`<button type="button" class="${own?"own":""}" data-cat="${esc(c)}" data-pl="${pl?1:0}" aria-pressed="false">${esc(c)}</button>`).join("")}</div></div>
-    <div class="fld"><label for="xCat">یا نئی قسم لکھیں</label><input id="xCat" name="cat" required placeholder="${inc?"مثلاً پرانی مشین فروخت":"مثلاً موبائل بیلنس"}" autocomplete="off"></div>
-    <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> یہ ${inc?"آمدنی":"خرچہ"} منافع کے حساب میں شامل ہو</label>
+      ${(()=>{const {top,rest}=catTop(dir);return `<div class="cat-chips" id="catChips">${top.map(([c,pl,own])=>`<button type="button" class="${own?"own":""}" data-cat="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join("")}</div>
+      ${rest.length?`<select id="catMore" aria-label="مزید قسمیں"><option value="">مزید قسمیں (${rest.length}) ▾</option>${rest.map(([c])=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>`:""}`})()}</div>
+    <div class="fld"><label for="xCat">قسم (اوپر سے چنیں یا نئی لکھیں)</label><input id="xCat" name="cat" required placeholder="${inc?"مثلاً پرانی مشین فروخت":"مثلاً موبائل بیلنس"}" autocomplete="off"></div>
+    <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> ${inc?"یہ آمدنی نفع و نقصان میں \"دیگر آمدنی\" کے طور پر گنی جائے":"یہ خرچہ نفع و نقصان میں خرچ کے طور پر گنا جائے (مالک کی ذاتی رقم ہو تو ٹک ہٹا دیں)"}</label>
     ${inc?`<label class="sale-toggle"><input type="checkbox" id="xSale" name="sale"> <span><b>اسے فروخت میں شمار کریں</b><small>ٹک کریں تو یہ رقم آج کی فروخت، روزانہ فروخت اور رپورٹس میں "فروخت" میں جڑے گی۔ ٹک نہ کریں تو صرف آمد رہے گی۔</small></span></label>`:""}
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     ${inc?"":`<div class="supp-box">
@@ -937,7 +975,7 @@ document.addEventListener("submit",async ev=>{
     if(ok){toast("اسٹاک اپڈیٹ ہو گیا");sheetItem(id)}
   }
   if(kind==="expense"){
-    const amt=num(d.amount);if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
+    const amt=calcEval(d.amount);if(!(amt>0)){toast(isNaN(amt)?"رقم کا حساب درست نہیں":"رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const dir=f.dataset.dir==="in"?"in":"out",cat=d.cat.trim(),known=catList(dir).find(([c])=>c===cat);
     const sname=dir==="out"?(d.supp||"").trim():"",link=!!sname&&!!d.ledger;
@@ -1035,6 +1073,8 @@ document.addEventListener("click",async ev=>{
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
   if(ds.cat!==undefined){const inp=$("#xCat");if(inp){inp.value=ds.cat;syncCat()}return}
+  if(ds.calcbtn){const pad=$("#"+ds.calcbtn+"Pad");if(pad)pad.hidden=!pad.hidden;return}
+  if(ds.ck){calcKey(ds.for,ds.ck);return}
   if(ds.xm){S.xMode=ds.xm;syncExpSupp();return}
   if(ds.bk){S.bulkKind=ds.bk;document.querySelectorAll("[data-bk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.bk===ds.bk));return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
@@ -1106,6 +1146,7 @@ document.addEventListener("input",e=>{
   if(t.id==="pPaid"){S.pPaid=t.value;updPTotal()}
   if(t.id==="cSearch")renderContactBox(t.value);
   if(t.id==="xCat")syncCat();
+  if(t.dataset.calc!==undefined)calcShow(t.id);
   if(["xSupp","xAmt","xPaid"].includes(t.id))syncExpSupp();
   if(t.dataset.bf){const [i,f]=t.dataset.bf.split(":");if(S.bulk&&S.bulk[+i])S.bulk[+i][f]=f==="balance"?t.value:t.value}
   if(t.id==="iSaleSize")t.dataset.touched="1";
@@ -1117,6 +1158,7 @@ document.addEventListener("change",e=>{
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
+  if(t.id==="catMore"&&t.value){const inp=$("#xCat");inp.value=t.value;syncCat()}
   if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
