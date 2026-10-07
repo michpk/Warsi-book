@@ -6,11 +6,11 @@
     "allowMixedContent": false,
     "adjustMarginsForEdgeToEdge": "force"
   },
-  "backgroundColor": "#0a5444",
+  "backgroundColor": "#0b2b33",
   "plugins": {
     "StatusBar": {
       "overlaysWebView": false,
-      "backgroundColor": "#0a5444",
+      "backgroundColor": "#0b2b33",
       "style": "DARK"
     }
   }

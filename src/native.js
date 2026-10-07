@@ -46,7 +46,7 @@ export async function initStatusBar() {
   try {
     const { StatusBar, Style } = await import("@capacitor/status-bar");
     await StatusBar.setOverlaysWebView({ overlay: false });
-    await StatusBar.setBackgroundColor({ color: "#0a5444" });
+    await StatusBar.setBackgroundColor({ color: "#0b2b33" });
     await StatusBar.setStyle({ style: Style.Dark });
   } catch (e) { /* older phones: nothing to do */ }
 }
