@@ -301,3 +301,5 @@ form.f{display:flex;flex-direction:column;gap:12px}
 .sugg{border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-top:4px;overflow:hidden;box-shadow:var(--shadow)}
 .sugg[hidden]{display:none}.sugg button{display:flex;justify-content:space-between;gap:8px;width:100%;border:0;border-bottom:1px solid var(--line);background:none;padding:10px 12px;text-align:start;cursor:pointer;font-size:14px}
 .sugg button:hover{background:var(--sunk)}.sugg-new{padding:8px 12px;font-size:13px;color:var(--accent);background:var(--accent-2)}
+.own-box{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--surface)}
+.bad-txt{color:var(--owe)!important}

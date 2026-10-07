@@ -805,6 +805,8 @@ function sheetExpView(id){
     <div class="bal-box ${inc?"pay":"owe"}"><div><div class="note">${esc(expCat(x))}</div><div class="v ${inc?"c-pay":"c-owe"}">${fmt(x.amount)}</div></div><div class="note"><span class="num">${dstr(x.date)}</span><br>${esc(branchName(x.branch))}${x.byName?" · "+esc(x.byName):""}</div></div>
     ${String(x.note||"").includes(" · ")?`<p style="margin:10px 0 0">${esc(String(x.note).split(" · ").slice(1).join(" · "))}</p>`:""}
     ${x.suppName?`<div class="qr-row" style="margin-top:10px"><div><b>سپلائر: ${esc(x.suppName)}</b><div class="note">${x.paid!=null&&x.paid<x.amount?`نقد ${fmt(x.paid)} · ادھار ${fmt(x.amount-x.paid)} (سپلائر کے کھاتے میں)`:"پوری رقم نقد دی گئی"}</div>${x.supp?`<button class="btn sm" data-cust="${esc(x.supp)}">سپلائر کا کھاتہ کھولیں</button>`:""}</div></div>`:""}
+    ${x.own?`<p class="note">اس میں سے <b>${fmt(x.own)}</b> اپنی جیب سے دیے گئے (مالک نے رقم ڈالی)۔</p>`:""}
+    ${x.ownFor?`<p class="note">یہ رقم ایک خرچے کے لیے اپنی جیب سے ڈالی گئی تھی۔</p>`:""}
     ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
     ${inc?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
@@ -853,6 +855,15 @@ function suggSupp(){
   box.innerHTML=hits.map(c=>`<button type="button" data-pickss="${esc(c.name)}">${esc(c.name)}${c.phone?` <span class="note num">${esc(c.phone)}</span>`:""}</button>`).join("")+(v&&!list.some(c=>(c.name||"").toLowerCase()===v)?`<div class="sugg-new">+ "${esc((($("#xSupp")||{}).value||"").trim())}" نیا سپلائر بنے گا</div>`:"");
   box.hidden=!box.innerHTML;
 }
+function syncOwn(){
+  const h=$("#xOwnHint");if(!h)return;const own=num(($("#xOwn")||{}).value);
+  const amt=calcEval(($("#xAmt")||{}).value)||0,v=(($("#xSupp")||{}).value||"").trim(),led=v&&($("#xLedger")||{}).checked;
+  const cash=!led?amt:S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
+  h.classList.toggle("bad-txt",own>cash);
+  h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ خود \"مالک نے رقم ڈالی\" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔"
+    :own>cash?`اپنی جیب کی رقم نقد ادائیگی (${fmt(cash)}) سے زیادہ نہیں ہو سکتی۔`
+    :`گلّے سے ${fmt(cash-own)} گیا · اپنی جیب سے ${fmt(own)} (یہ "مالک نے رقم ڈالی" کی آمد میں درج ہوگا)`;
+}
 function syncExpSupp(){
   const v=(($("#xSupp")||{}).value||"").trim(),more=$("#xSuppMore");if(!more)return;more.hidden=!v;
   const ex=S.customers.find(c=>c.kind==="supplier"&&(c.name||"").trim().toLowerCase()===v.toLowerCase());
@@ -860,6 +871,7 @@ function syncExpSupp(){
   document.querySelectorAll("[data-xm]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.xm===S.xMode));
   $("#xPaidRow").hidden=S.xMode!=="part";
   const amt=calcEval(($("#xAmt")||{}).value)||0,paid=S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
+  syncOwn();
   $("#xSuppHint").textContent=!led?"":(ex?"":`"${v}" نام کا نیا سپلائر کھاتہ بن جائے گا۔ `)+(amt?(amt-paid>0?`${fmt(amt-paid)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا${paid?`، نقد ${fmt(paid)} روزنامچہ میں جائے گا`:""}۔`:`پوری رقم نقد دی گئی۔ کھاتے میں ریکارڈ رہے گا، بقایا نہیں بنے گا۔`):"");
 }
 function sheetExpense(dir="out"){
@@ -885,7 +897,9 @@ function sheetExpense(dir="out"){
           <p class="note" id="xSuppHint" style="margin:0"></p>
         </div>
       </div>
-    </div>`}
+    </div>
+    <div class="own-box"><div class="fld"><label for="xOwn">نقد میں سے کتنا اپنی جیب سے دیا؟ (اختیاری)</label><input id="xOwn" name="own" class="num" inputmode="decimal" placeholder="0 — سب گلّے سے دیا"></div>
+      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ خود "مالک نے رقم ڈالی" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔</p></div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
@@ -994,8 +1008,12 @@ document.addEventListener("submit",async ev=>{
     ops.push({op:"set",col:"expenses",id:xid,data:{amount:amt,paid,dir,att,sale:dir==="in"&&!!d.sale,pl:known?known[1]:!!d.pl,note,date:dt,branch:d.branch||"",...(link?{supp:sup.id,suppName:sup.name}:sname?{suppName:sname}:{}),...by()}});
     if(link){ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:amt,note:"خرچہ: "+note,date:dt,branch:d.branch||"",exp:xid,...by()}});
       if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خرچہ (نقد ادا): "+cat,date:dt+1,branch:d.branch||"",exp:xid,...by()}})}
+    const own=dir==="out"?num(d.own):0;
+    if(own>paid){toast("اپنی جیب کی رقم نقد ادائیگی سے زیادہ نہیں ہو سکتی");if(btn)btn.disabled=false;return}
+    if(own>0)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:own,dir:"in",pl:false,sale:false,att:[],note:"مالک نے رقم ڈالی · "+cat+(sname?" ("+sname+")":"")+" کے لیے",date:dt-1,branch:d.branch||"",ownFor:xid,...by()}});
+    if(own>0)ops.find(o=>o.id===xid).data.own=own;
     ok=await w(()=>db.batch(ops));
-    if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":"خرچہ محفوظ")}
+    if(ok){closeSheet();toast(dir==="in"?"آمد محفوظ":own>0?"خرچہ اور اپنی جیب کی رقم محفوظ":"خرچہ محفوظ")}
   }
   if(kind==="addphoto"){
     const col=f.dataset.col==="entries"?"entries":"expenses",x=S[col].find(e=>e.id===id);
@@ -1096,7 +1114,7 @@ document.addEventListener("click",async ev=>{
   if(ds.prm){S.pcart.splice(+ds.prm,1);render();return}
   if(ds.pickc){fillContact(S.contacts[+ds.pickc]);return}
   if(ds.delexp){const box=$("#dx_"+CSS.escape(ds.delexp));if(box)box.innerHTML=`<div class="confirm">یہ خرچہ حذف کریں؟<button class="btn owe sm" data-delexpyes="${esc(ds.delexp)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
-  if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);closeSheet();toast("حذف ہو گیا")}return}
+  if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);for(const x of S.expenses.filter(x=>x.ownFor===id))db.remove("expenses",x.id);closeSheet();toast("حذف ہو گیا")}return}
   if(ds.cust){sheetCust(ds.cust);return}
   if(ds.item){sheetItem(ds.item);return}
   if(ds.salev){sheetSale(ds.salev);return}
@@ -1158,6 +1176,7 @@ document.addEventListener("input",e=>{
   if(t.dataset.calc!==undefined)calcShow(t.id);
   if(["xSupp","xAmt","xPaid"].includes(t.id))syncExpSupp();
   if(t.id==="xSupp")suggSupp();
+  if(t.id==="xOwn")syncOwn();
   if(t.dataset.bf){const [i,f]=t.dataset.bf.split(":");if(S.bulk&&S.bulk[+i])S.bulk[+i][f]=f==="balance"?t.value:t.value}
   if(t.id==="iSaleSize")t.dataset.touched="1";
   if(["iBuySize","iSaleSize","iCost","iUnitOther","iBuyOther"].includes(t.id))syncItemForm();
