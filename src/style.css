@@ -40,10 +40,18 @@ header.top::after{content:"";position:absolute;inset-inline:0;bottom:0;height:3p
 .logo-ring{width:62px;height:62px;flex:none;border-radius:16px;display:grid;place-items:center;background:radial-gradient(circle at 50% 40%,rgba(255,255,255,.18),rgba(255,255,255,.04) 70%);box-shadow:inset 0 0 0 1px rgba(241,213,138,.35),0 6px 14px -6px rgba(0,0,0,.5)}
 .logo{height:54px;width:auto;filter:drop-shadow(0 3px 5px rgba(0,0,0,.4))}
 .brand-text{min-width:0;display:flex;flex-direction:column}
-.brand{font-family:var(--f-display);font-size:27px;line-height:1.65;font-weight:700;margin:0;
-  background:linear-gradient(180deg,#fff7dc 10%,#f1d58a 55%,#c9973c 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 1px 1px rgba(0,0,0,.35))}
-.brand-tag{direction:ltr;text-align:right;font-family:var(--f-num);font-size:10px;letter-spacing:.2em;color:rgba(255,255,255,.72);margin-top:-6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.brand-tag .t2>span{color:var(--brass);margin:0 .6em;font-size:8px;vertical-align:middle}
+.brand{font-family:var(--f-display);font-size:40px;line-height:1.85;font-weight:700;margin:0;padding:0 .08em .12em;
+  background:linear-gradient(180deg,#fffaf0 0%,#f6dc93 45%,#d6a545 80%,#b8862b 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 2px 2px rgba(0,0,0,.45));white-space:nowrap}
+.brand-tag{direction:ltr;text-align:right;font-family:var(--f-num);font-size:11px;letter-spacing:.22em;color:rgba(255,255,255,.75);margin-top:2px;white-space:nowrap;display:flex;justify-content:flex-end;align-items:center}
+.brand-tag .t1 i{font-style:normal;color:var(--brass);margin:0 .7em;font-size:8px}
+/* motto: letters rise in once, then a slow gold shimmer passes over */
+.motto{font-weight:600;background:linear-gradient(100deg,#f1d58a 0%,#f1d58a 40%,#fffbe8 50%,#f1d58a 60%,#f1d58a 100%);background-size:250% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:mottoIn 1.1s cubic-bezier(.2,.7,.2,1) both,shimmer 4.5s ease-in-out 1.2s infinite}
+@keyframes mottoIn{from{opacity:0;letter-spacing:.6em;filter:blur(2px)}to{opacity:1;letter-spacing:.22em;filter:none}}
+@keyframes shimmer{0%{background-position:100% 0}60%,100%{background-position:-60% 0}}
+.logo{animation:logoIn .7s ease-out both}@keyframes logoIn{from{opacity:0;transform:translateY(-6px) scale(.92)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.motto,.logo{animation:none}.motto{color:#f1d58a;background:none}}
 .hdr-tools{grid-area:tools;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .branch-pick{display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.10);border:1px solid rgba(241,213,138,.35);border-radius:999px;padding:3px 6px 3px 12px;color:#f1d58a;backdrop-filter:blur(4px)}
 .branch-pick select{border:0;background:transparent;color:#fff;padding:5px 4px;font-weight:600;max-width:46vw}
@@ -59,9 +67,9 @@ header.top::after{content:"";position:absolute;inset-inline:0;bottom:0;height:3p
   .hdr-tools{justify-content:flex-end}
 }
 @media (max-width:640px){
-  .who{padding:3px!important}.who .who-txt{display:none!important}.brand-tag .t2{display:none}
+  .who{padding:3px!important}.who .who-txt{display:none!important}
   .branch-pick{flex:1}.branch-pick select{max-width:none;flex:1}
-  .brand{font-size:24px}.logo-ring{width:54px;height:54px}.logo{height:46px}
+  .brand{font-size:32px}.logo-ring{width:56px;height:56px}.logo{height:48px}.brand-tag .t1{display:none}.brand-tag{font-size:10.5px}
 }
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 .who{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.14);border-radius:999px;padding:3px 4px 3px 12px}
@@ -77,7 +85,7 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
 main{flex:1;min-width:0;display:flex;flex-direction:column;gap:16px}
 @media (min-width:860px){
   .shell{padding-block:20px 40px}
-  nav.tabs{position:sticky;top:104px;align-self:flex-start;display:flex;flex-direction:column;width:190px;border:1px solid var(--line);border-radius:var(--r);padding:6px;gap:2px}
+  nav.tabs{position:sticky;top:116px;align-self:flex-start;display:flex;flex-direction:column;width:190px;border:1px solid var(--line);border-radius:var(--r);padding:6px;gap:2px}
   nav.tabs button{flex-direction:row;justify-content:flex-start;gap:10px;padding:10px 12px;border-radius:8px;font-size:15px}
   nav.tabs button[aria-current="page"]{background:var(--accent-2)}
 }
