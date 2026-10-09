@@ -327,3 +327,26 @@ button.stat.tile{font:inherit;color:inherit;text-align:start;cursor:pointer;bord
 button.stat.tile:hover{border-color:var(--accent)}
 .btn.danger{color:var(--owe);border-color:var(--owe-bg);background:var(--surface)}.btn.danger:hover{background:var(--owe-bg);border-color:var(--owe)}
 .del-box{border:1px solid var(--owe);background:var(--owe-bg);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;margin-bottom:10px}.del-box p{margin:0;font-size:14px}
+
+/* ---- scan-to-pay QR on bills and ledgers ---- */
+.pay-box{margin-top:12px;border:1.5px solid color-mix(in srgb,var(--brass) 55%,var(--line));border-radius:14px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:10px}
+.pay-box:empty{display:none}
+.pay-h{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pay-body{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.pay-body img{background:#fff;border-radius:10px;padding:6px;flex:none;width:200px;height:auto;max-width:100%;margin-inline:auto}
+.pay-info{flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px}
+.pay-t{font-weight:700}
+.pay-d{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px}
+.pay-d span{color:var(--muted);min-width:90px}
+.pay-d b{font-family:var(--num-font,inherit);word-break:break-all}
+.pay-prev{display:flex;gap:10px;align-items:center}
+.pay-prev:empty{display:none}
+.pay-prev img{background:#fff;border-radius:8px;padding:4px;border:1px solid var(--line)}
+.pdf-page .pd-pay{margin-top:16px;border:1.5px solid #d6a545;border-radius:10px;padding:10px 12px}
+.pdf-page .pd-pay-h{font-size:14px;margin-bottom:8px}
+.pdf-page .pd-pay-row{display:flex;gap:16px;flex-wrap:wrap}
+.pdf-page .pd-pay1{display:flex;gap:10px;align-items:center;flex:1;min-width:220px}
+.pdf-page .pd-pay1 img{width:120px;height:120px;object-fit:contain}
+.pdf-page .pd-pay1 .pay-d{font-size:12px}
+.pdf-page .pd-pay1 .pay-d span{color:#555;min-width:auto}
+.pdf-page .pd-qr{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#555}

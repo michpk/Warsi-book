@@ -1,5 +1,6 @@
 import "./style.css";
-import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } from "./data.js";
+import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
+import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts } from "./pay.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
@@ -460,6 +461,7 @@ function vBranch(){
       </div>${br.address?`<div class="pad note" style="padding-top:0">${esc(br.address)}</div>`:""}
       <div class="pad" style="padding-top:0"><button class="btn sm" data-setbranch="${esc(br.id)}">اس برانچ پر کام کریں</button></div></section>`}).join("")}</div>`
   :`<div class="card empty"><strong>کوئی برانچ نہیں</strong><span>اپنی دکان کو پہلی برانچ کے طور پر شامل کریں۔</span>${S.isAdmin?`<button class="btn primary" data-act="newBranch">+ برانچ بنائیں</button>`:""}</div>`}
+  ${payCardHtml()}
   <div id="teamBox"></div>`;
 }
 
@@ -543,6 +545,7 @@ async function saveBulk(btn){
 /* ---------- QR codes and PDF documents ---------- */
 const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 14h6M9 18h4"/></svg>';
 const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
+const saleDue=s=>Math.max(0,Math.round(s.total>s.paid?s.total-s.paid:s.total));
 function billQrText(s,purchase){return `WB-${purchase?"P":"S"}:${s.id}\n${shopTitle()}\n${purchase?"خریداری":"بل"} #${s.no}\n${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||"نقد"}\nکل: Rs ${Math.round(s.total)}\nنقد: Rs ${Math.round(s.paid)}${s.total>s.paid?"\nادھار: Rs "+Math.round(s.total-s.paid):""}`}
 function ledgerQrText(c,v){return `WB-C:${c.id}\n${shopTitle()}\n${c.kind==="supplier"?"سپلائر":"گاہک"}: ${c.name}\n${c.phone||""}\n${v>0?"لینے ہیں":v<0?"دینے ہیں":"حساب برابر"}: Rs ${Math.round(Math.abs(v))}\n${new Date().toLocaleDateString("en-GB")}`}
 const pdfHead=(title,sub)=>`<div class="pd-head"><img src="logo.png" alt=""><div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-tag">Care Your Dreams</div></div><div class="pd-title"><b>${title}</b><span>${sub}</span></div></div>`;
@@ -552,7 +555,8 @@ async function billPdf(s,purchase){
     <div class="pd-party"><div><span>${purchase?"سپلائر":"گاہک"}</span><b>${esc(s.custName||s.suppName||(purchase?"نقد خریداری":"کاؤنٹر گاہک"))}</b></div><div><span>برانچ</span><b>${esc(branchName(s.branch))}</b></div>${s.byName?`<div><span>بنانے والا</span><b>${esc(s.byName)}</b></div>`:""}</div>
     <table class="pd-tbl"><thead><tr><th>#</th><th>چیز</th><th>تعداد</th><th>ریٹ</th><th>رقم</th></tr></thead><tbody>
     ${(s.lines||[]).map((l,i)=>`<tr><td>${i+1}</td><td>${esc(l.name)}</td><td>${fq(l.qty)} ${esc(l.unit||"")}</td><td>${fq(l.price)}</td><td>${fq(l.qty*l.price)}</td></tr>`).join("")}</tbody></table>
-    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div><span>کل رقم</span><b>${fmt(s.total)}</b></div><div><span>نقد</span><b>${fmt(s.paid)}</b></div>${s.total>s.paid?`<div class="due"><span>ادھار (کھاتے میں)</span><b>${fmt(s.total-s.paid)}</b></div>`:""}</div></div>
+    <div class="pd-foot"><div class="pd-qr"><img src="${qr}" alt=""><span>بل کی تفصیل</span></div><div class="pd-tot"><div><span>کل رقم</span><b>${fmt(s.total)}</b></div><div><span>نقد</span><b>${fmt(s.paid)}</b></div>${s.total>s.paid?`<div class="due"><span>ادھار (کھاتے میں)</span><b>${fmt(s.total-s.paid)}</b></div>`:""}</div></div>
+    ${purchase?"":await payPdfHtml(saleDue(s))}
     <p class="pd-thanks">خریداری کا شکریہ</p>`;
   return await htmlToPdf(html,(purchase?"purchase-":"bill-")+s.no+".pdf");
 }
@@ -563,7 +567,7 @@ async function ledgerPdf(c){
     <div class="pd-party"><div><span>${sup?"سپلائر":"گاہک"}</span><b>${esc(c.name)}</b></div><div><span>فون</span><b dir="ltr">${esc(c.phone||"—")}</b></div><div><span>برانچ</span><b>${esc(branchName(c.branch))}</b></div></div>
     <table class="pd-tbl"><thead><tr><th>تاریخ</th><th>تفصیل</th><th>${sup?"ادائیگی":"دیے"} (+)</th><th>${sup?"مال آیا":"ملے"} (−)</th><th>بقایا</th></tr></thead><tbody>
     ${rows.map(e=>`<tr><td>${new Date(e.date).toLocaleDateString("en-GB")}</td><td>${esc(e.note||"")}</td><td>${e.type==="gave"?fq(e.amount):""}</td><td>${e.type==="got"?fq(e.amount):""}</td><td>${fq(e.run)}</td></tr>`).join("")||`<tr><td colspan="5">کوئی اندراج نہیں</td></tr>`}</tbody></table>
-    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div class="${run>0?"due":""}"><span>${run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}</span><b>${fmt(Math.abs(run))}</b></div></div></div>`;
+    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div class="${run>0?"due":""}"><span>${run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}</span><b>${fmt(Math.abs(run))}</b></div></div></div>${!sup&&run>0?await payPdfHtml(run):""}`;
   return await htmlToPdf(html,"khata-"+(c.name||"").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,30)+".pdf");
 }
 async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerHTML;btn.textContent="بن رہی ہے…"}try{const r=await fn();if(typeof r==="string"&&r.startsWith("Documents"))toast("فائل فون میں محفوظ: "+r);else if(r!=="cancelled")toast("فائل تیار")}catch(e){console.error(e);toast("فائل نہیں بن سکی: "+(e&&e.message||e))}finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.lbl}}}
@@ -572,7 +576,7 @@ async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerH
 const shopLine=()=>S.shopName?"\n— "+S.shopName:"";
 function waReminder(c,v){
   if(c.kind==="supplier")return v<0?`السلام علیکم ${c.name}،\nہمارے حساب کے مطابق آپ کے ${fmt(-v)} ہمارے ذمے باقی ہیں۔ جلد ادا کر دیں گے، ان شاء اللہ۔${shopLine()}`:`السلام علیکم ${c.name}،\nہمارا حساب ${v>0?"آپ کے ذمے "+fmt(v)+" بنتا ہے":"برابر ہے"}۔${shopLine()}`;
-  return v>0?`السلام علیکم ${c.name}،\nآپ کے کھاتے میں ${fmt(v)} باقی ہیں۔ براہ کرم سہولت سے ادائیگی کر دیں۔ شکریہ${shopLine()}`:`السلام علیکم ${c.name}،\nآپ کا کھاتہ ${v<0?"ہمارے ذمے "+fmt(-v):"برابر"} ہے۔ شکریہ${shopLine()}`;
+  return v>0?`السلام علیکم ${c.name}،\nآپ کے کھاتے میں ${fmt(v)} باقی ہیں۔ براہ کرم سہولت سے ادائیگی کر دیں۔ شکریہ${payText()}${shopLine()}`:`السلام علیکم ${c.name}،\nآپ کا کھاتہ ${v<0?"ہمارے ذمے "+fmt(-v):"برابر"} ہے۔ شکریہ${shopLine()}`;
 }
 function waStatement(c,rows,v){
   const sup=c.kind==="supplier";
@@ -580,7 +584,7 @@ function waStatement(c,rows,v){
   return `السلام علیکم ${c.name}،\n*کھاتے کی تفصیل*${rows.length>15?" (آخری 15 اندراج)":""}\n\n${lines.join("\n")}\n\n*${v>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):v<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}: ${fmt(Math.abs(v))}*${shopLine()}`;
 }
 function waBill(s,purchase){
-  return `${purchase?"*خریداری":"*بل"} #${s.no}*  ${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||""}\n\n`+(s.lines||[]).map(l=>`${l.name}\n   ${fq(l.qty)} ${l.unit||""} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\n\n*کل: ${fmt(s.total)}*\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"")+shopLine();
+  return `${purchase?"*خریداری":"*بل"} #${s.no}*  ${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||""}\n\n`+(s.lines||[]).map(l=>`${l.name}\n   ${fq(l.qty)} ${l.unit||""} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\n\n*کل: ${fmt(s.total)}*\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"")+(purchase?"":payText())+shopLine();
 }
 function waButtons(phone,pairs){
   const ok=String(phone||"").replace(/\D/g,"").length>=10;
@@ -614,10 +618,12 @@ function sheetCust(id){
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
    ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
+   ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
   const th=$("#pcThumb");if(th){const aid=th.dataset.attThumb;(ATT[aid]?Promise.resolve(ATT[aid]):getAttachment(aid).then(d=>ATT[aid]=d)).then(d=>{if(d&&d.data&&$("#pcThumb"))$("#pcThumb").innerHTML=`<img src="${d.data}" alt="تازہ بل کی تصویر"><span class="pc-open">بڑی کر کے دیکھیں</span>`}).catch(()=>{if($("#pcThumb"))$("#pcThumb").innerHTML=`<span class="note">انٹرنیٹ کے بغیر تصویر نہیں کھل سکتی</span>`})}
+  if(c.kind!=="supplier"&&v>0)fillPayBox(v,0);
   qrDataUrl(ledgerQrText(c,v)).then(u=>{const q=$("#custQr");if(q)q.innerHTML=`<img src="${u}" alt="کھاتے کا QR کوڈ" width="96" height="96"><div><b>کھاتے کا QR کوڈ</b><div class="note">اس میں گاہک کا نام، نمبر اور بقایا ہے۔</div>${S.canWrite||true?`<button class="btn sm" data-ledpdf="${esc(c.id)}">${PDF_ICON} کھاتہ PDF</button>`:""}</div>`});
 }
 function entryFormHtml(type){
@@ -713,8 +719,10 @@ function sheetSale(id){
    <tr><td colspan="3"><strong>کل</strong></td><td class="n num"><strong>${fq(s.total)}</strong></td></tr>
    <tr><td colspan="3">نقد وصول</td><td class="n num">${fq(s.paid)}</td></tr>
    ${s.total>s.paid?`<tr><td colspan="3" class="c-owe">کھاتے میں ادھار</td><td class="n num c-owe">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
+   ${payBoxHtml()}
    <div class="qr-row" id="billQr"></div>
    <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+  fillPayBox(saleDue(s));
   qrDataUrl(billQrText(s)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="بل کا QR کوڈ" width="96" height="96"><div><b>بل کا QR کوڈ</b><div class="note">اسکین کرنے پر بل نمبر، تاریخ، گاہک اور رقم نظر آتی ہے۔</div></div>`});
 }
 
@@ -1245,5 +1253,6 @@ setTimeout(checkForUpdate,2500);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!document.getElementById("upd"))checkForUpdate.__t=(clearTimeout(checkForUpdate.__t),setTimeout(checkForUpdate,1500))});
 S.appVersion=appVersion();
 /* ---------- boot ---------- */
-import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile}));
+initPay({S,esc,fmt,toast,openSheet,closeSheet,$,render,savePayAccounts});bindPayEvents();
+import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile,setPayAccounts}));
 export {S};

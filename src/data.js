@@ -155,6 +155,10 @@ export const authApi = {
 export async function shopInfo() {
   try { const s = await getDoc(doc(fs, "meta", "shop")); return s.exists() ? s.data() : null; } catch (e) { return null; }
 }
+// Shop payment accounts live on the shop document (only the owner may change it).
+export function savePayAccounts(list) {
+  return updateDoc(doc(fs, "meta", "shop"), { pay: list }).catch(e => { console.error(e); throw e; });
+}
 export function watchMe(uid, cb) {
   return onSnapshot(doc(fs, "users", uid), s => cb(s.exists() ? s.data() : null), e => { console.error(e); cb(null); });
 }

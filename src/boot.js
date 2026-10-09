@@ -3,7 +3,7 @@ import { configured, list } from "./data.js";
 import { createLock } from "./lock.js";
 
 export function boot(ctx) {
-  const { S, me, render, toast, $, esc, db, startSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole } = ctx;
+  const { S, me, render, toast, $, esc, db, startSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, setPayAccounts } = ctx;
   const authEl = document.getElementById("auth");
   const show = html => { authEl.innerHTML = `<div class="auth-card">${html}</div>`; authEl.hidden = false; };
   const hide = () => { authEl.hidden = true; authEl.innerHTML = ""; };
@@ -123,7 +123,7 @@ export function boot(ctx) {
       set("who", me.name); set("whoRole", ROLE[prof.role]); set("whoAv", (me.name || "?").trim()[0] || "?");
       const chip = document.getElementById("whoChip"); if (chip) chip.hidden = false;
       try { set("todayStr", new Date().toLocaleDateString("ur-PK", { weekday: "long", day: "numeric", month: "long" })); } catch (e) {}
-      shopInfo().then(sh => { if (sh && sh.name) S.shopName = sh.name; });
+      shopInfo().then(sh => { if (sh && sh.name) S.shopName = sh.name; if (sh) { setPayAccounts(sh.pay || []); if (S.tab === "branch") render(); } });
       if (!started) {
         started = true;
         if (me.branch) { try { if (!localStorage.getItem("hk_branch")) S.branch = me.branch; } catch (e) { S.branch = me.branch; } }
