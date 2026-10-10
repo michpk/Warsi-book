@@ -1,6 +1,6 @@
 // Files people can keep or send: bill / ledger PDFs with QR codes, report as Excel or PDF.
 // Heavy libraries are loaded only when a file is actually made.
-import { saveBinary } from "./native.js";
+import { saveBinary, isNative } from "./native.js";
 
 export async function qrDataUrl(text, size = 220) {
   const QR = (await import("qrcode")).default;
@@ -8,7 +8,7 @@ export async function qrDataUrl(text, size = 220) {
 }
 
 /* Render a block of HTML (always light, A4 width) into a multi-page PDF. */
-export async function htmlToPdf(html, filename) {
+export async function htmlToPdf(html, filename, opts = {}) {
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas"), import("jspdf")]);
   const host = document.createElement("div");
   host.className = "pdf-page"; host.setAttribute("dir", "rtl"); host.setAttribute("lang", "ur");
@@ -27,6 +27,7 @@ export async function htmlToPdf(html, filename) {
       if (i) pdf.addPage();
       pdf.addImage(slice.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, pw, slice.height * pw / canvas.width);
     }
+    if (opts.print && !isNative) return printBlob(pdf.output("blob"));
     const b64 = pdf.output("datauristring").split(",")[1];
     return await saveBinary(filename, b64, "application/pdf");
   } finally { host.remove(); }
@@ -44,4 +45,18 @@ export async function sheetsToXlsx(sheets, filename) {
   }
   const b64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
   return await saveBinary(filename, b64, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+/* Website: open the browser's print window for a PDF. Phones (app): the share sheet is used instead,
+   where a PDF viewer or Drive offers "Print". */
+function printBlob(blob) {
+  const url = URL.createObjectURL(blob);
+  const touch = window.matchMedia && matchMedia("(pointer:coarse)").matches;
+  if (touch) { const w = window.open(url, "_blank"); if (!w) location.href = url; setTimeout(() => URL.revokeObjectURL(url), 60000); return "printed"; }
+  const f = document.createElement("iframe");
+  f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
+  f.src = url;
+  f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { window.open(url, "_blank"); } setTimeout(() => { f.remove(); URL.revokeObjectURL(url); }, 60000); };
+  document.body.appendChild(f);
+  return "printed";
 }

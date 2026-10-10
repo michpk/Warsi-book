@@ -350,3 +350,6 @@ button.stat.tile:hover{border-color:var(--accent)}
 .pdf-page .pd-pay1 .pay-d{font-size:12px}
 .pdf-page .pd-pay1 .pay-d span{color:#555;min-width:auto}
 .pdf-page .pd-qr{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#555}
+.send-card{margin:4px 0 12px;border:1px solid var(--line);border-radius:14px;padding:12px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.send-h{display:flex;align-items:center;gap:8px}
+.bill-link{padding:1px 8px;font-size:12px;min-height:0;margin-inline-start:4px;vertical-align:middle}

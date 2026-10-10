@@ -543,13 +543,14 @@ async function saveBulk(btn){
 }
 
 /* ---------- QR codes and PDF documents ---------- */
+const PRINT_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2"/><path d="M7 14h10v7H7z"/></svg>';
 const PDF_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 14h6M9 18h4"/></svg>';
 const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
 const saleDue=s=>Math.max(0,Math.round(s.total>s.paid?s.total-s.paid:s.total));
 function billQrText(s,purchase){return `WB-${purchase?"P":"S"}:${s.id}\n${shopTitle()}\n${purchase?"خریداری":"بل"} #${s.no}\n${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||"نقد"}\nکل: Rs ${Math.round(s.total)}\nنقد: Rs ${Math.round(s.paid)}${s.total>s.paid?"\nادھار: Rs "+Math.round(s.total-s.paid):""}`}
 function ledgerQrText(c,v){return `WB-C:${c.id}\n${shopTitle()}\n${c.kind==="supplier"?"سپلائر":"گاہک"}: ${c.name}\n${c.phone||""}\n${v>0?"لینے ہیں":v<0?"دینے ہیں":"حساب برابر"}: Rs ${Math.round(Math.abs(v))}\n${new Date().toLocaleDateString("en-GB")}`}
 const pdfHead=(title,sub)=>`<div class="pd-head"><img src="logo.png" alt=""><div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-tag">Care Your Dreams</div></div><div class="pd-title"><b>${title}</b><span>${sub}</span></div></div>`;
-async function billPdf(s,purchase){
+async function billPdf(s,purchase,print){
   const qr=await qrDataUrl(billQrText(s,purchase),260);
   const html=`${pdfHead(purchase?"خریداری کا بل":"فروخت کا بل","#"+esc(s.no)+" · "+new Date(s.date).toLocaleDateString("en-GB")+" "+new Date(s.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}))}
     <div class="pd-party"><div><span>${purchase?"سپلائر":"گاہک"}</span><b>${esc(s.custName||s.suppName||(purchase?"نقد خریداری":"کاؤنٹر گاہک"))}</b></div><div><span>برانچ</span><b>${esc(branchName(s.branch))}</b></div>${s.byName?`<div><span>بنانے والا</span><b>${esc(s.byName)}</b></div>`:""}</div>
@@ -558,9 +559,9 @@ async function billPdf(s,purchase){
     <div class="pd-foot"><div class="pd-qr"><img src="${qr}" alt=""><span>بل کی تفصیل</span></div><div class="pd-tot"><div><span>کل رقم</span><b>${fmt(s.total)}</b></div><div><span>نقد</span><b>${fmt(s.paid)}</b></div>${s.total>s.paid?`<div class="due"><span>ادھار (کھاتے میں)</span><b>${fmt(s.total-s.paid)}</b></div>`:""}</div></div>
     ${purchase?"":await payPdfHtml(saleDue(s))}
     <p class="pd-thanks">خریداری کا شکریہ</p>`;
-  return await htmlToPdf(html,(purchase?"purchase-":"bill-")+s.no+".pdf");
+  return await htmlToPdf(html,(purchase?"purchase-":"bill-")+s.no+".pdf",{print});
 }
-async function ledgerPdf(c){
+async function ledgerPdf(c,print){
   const es=S.entries.filter(e=>e.cust===c.id).sort((a,b)=>a.date-b.date);let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}});
   const sup=c.kind==="supplier",qr=await qrDataUrl(ledgerQrText(c,run),260);
   const html=`${pdfHead("کھاتے کی تفصیل",new Date().toLocaleDateString("en-GB"))}
@@ -568,9 +569,9 @@ async function ledgerPdf(c){
     <table class="pd-tbl"><thead><tr><th>تاریخ</th><th>تفصیل</th><th>${sup?"ادائیگی":"دیے"} (+)</th><th>${sup?"مال آیا":"ملے"} (−)</th><th>بقایا</th></tr></thead><tbody>
     ${rows.map(e=>`<tr><td>${new Date(e.date).toLocaleDateString("en-GB")}</td><td>${esc(e.note||"")}</td><td>${e.type==="gave"?fq(e.amount):""}</td><td>${e.type==="got"?fq(e.amount):""}</td><td>${fq(e.run)}</td></tr>`).join("")||`<tr><td colspan="5">کوئی اندراج نہیں</td></tr>`}</tbody></table>
     <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div class="${run>0?"due":""}"><span>${run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}</span><b>${fmt(Math.abs(run))}</b></div></div></div>${!sup&&run>0?await payPdfHtml(run):""}`;
-  return await htmlToPdf(html,"khata-"+(c.name||"").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,30)+".pdf");
+  return await htmlToPdf(html,"khata-"+(c.name||"").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,30)+".pdf",{print});
 }
-async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerHTML;btn.textContent="بن رہی ہے…"}try{const r=await fn();if(typeof r==="string"&&r.startsWith("Documents"))toast("فائل فون میں محفوظ: "+r);else if(r!=="cancelled")toast("فائل تیار")}catch(e){console.error(e);toast("فائل نہیں بن سکی: "+(e&&e.message||e))}finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.lbl}}}
+async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerHTML;btn.textContent="بن رہی ہے…"}try{const r=await fn();if(typeof r==="string"&&r.startsWith("Documents"))toast("فائل فون میں محفوظ: "+r);else if(r==="printed")toast("پرنٹ کھل گیا");else if(r!=="cancelled")toast("فائل تیار")}catch(e){console.error(e);toast("فائل نہیں بن سکی: "+(e&&e.message||e))}finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.lbl}}}
 
 /* ---------- WhatsApp ---------- */
 const shopLine=()=>S.shopName?"\n— "+S.shopName:"";
@@ -615,16 +616,19 @@ function sheetCust(id){
      ${S.canWrite?`<button class="btn sm" data-editcust="${esc(c.id)}">ترمیم</button>`:""}
      ${S.isAdmin?`<button class="btn sm danger" data-delcust="${esc(c.id)}">کھاتہ حذف کریں</button>`:""}
    </div><div id="delCustBox"></div>
-   ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
-   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
-   :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
+   <div class="send-card"><div class="send-h">${PRINT_ICON}<b>${c.kind==="supplier"?"سپلائر":"گاہک"} کو کھاتہ بھیجیں یا پرنٹ کریں</b></div>
+     <div class="chips"><button class="btn primary sm" data-ledpdf="${esc(c.id)}">${PDF_ICON} کھاتہ PDF بھیجیں</button><button class="btn sm" data-ledprint="${esc(c.id)}">${PRINT_ICON} پرنٹ</button></div>
+     <p class="note" style="margin:0">PDF میں پورا کھاتہ، بقایا اور QR کوڈ${c.kind!=="supplier"&&v>0?" (ادائیگی کا QR بھی)":""} ہوتا ہے۔ فون پر "PDF بھیجیں" دبا کر واٹس ایپ چنیں۔ کسی ایک بل کا QR چاہیے تو نیچے اس بل کے سامنے "بل" دبائیں۔</p></div>
    ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
+   ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
+   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
+   :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
   const th=$("#pcThumb");if(th){const aid=th.dataset.attThumb;(ATT[aid]?Promise.resolve(ATT[aid]):getAttachment(aid).then(d=>ATT[aid]=d)).then(d=>{if(d&&d.data&&$("#pcThumb"))$("#pcThumb").innerHTML=`<img src="${d.data}" alt="تازہ بل کی تصویر"><span class="pc-open">بڑی کر کے دیکھیں</span>`}).catch(()=>{if($("#pcThumb"))$("#pcThumb").innerHTML=`<span class="note">انٹرنیٹ کے بغیر تصویر نہیں کھل سکتی</span>`})}
   if(c.kind!=="supplier"&&v>0)fillPayBox(v,0);
-  qrDataUrl(ledgerQrText(c,v)).then(u=>{const q=$("#custQr");if(q)q.innerHTML=`<img src="${u}" alt="کھاتے کا QR کوڈ" width="96" height="96"><div><b>کھاتے کا QR کوڈ</b><div class="note">اس میں گاہک کا نام، نمبر اور بقایا ہے۔</div>${S.canWrite||true?`<button class="btn sm" data-ledpdf="${esc(c.id)}">${PDF_ICON} کھاتہ PDF</button>`:""}</div>`});
+  qrDataUrl(ledgerQrText(c,v)).then(u=>{const q=$("#custQr");if(q)q.innerHTML=`<img src="${u}" alt="کھاتے کا QR کوڈ" width="96" height="96"><div><b>کھاتے کا QR کوڈ</b><div class="note">اس میں ${c.kind==="supplier"?"سپلائر":"گاہک"} کا نام، نمبر اور بقایا ہے۔ یہ PDF میں بھی چھپتا ہے۔</div></div>`});
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -721,7 +725,7 @@ function sheetSale(id){
    ${s.total>s.paid?`<tr><td colspan="3" class="c-owe">کھاتے میں ادھار</td><td class="n num c-owe">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
    ${payBoxHtml()}
    <div class="qr-row" id="billQr"></div>
-   <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+   <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF بھیجیں</button><button class="btn" data-billprint="${esc(s.id)}">${PRINT_ICON} پرنٹ</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
   fillPayBox(saleDue(s));
   qrDataUrl(billQrText(s)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="بل کا QR کوڈ" width="96" height="96"><div><b>بل کا QR کوڈ</b><div class="note">اسکین کرنے پر بل نمبر، تاریخ، گاہک اور رقم نظر آتی ہے۔</div></div>`});
 }
@@ -735,7 +739,7 @@ function sheetPurchase(id){
    <tr><td colspan="3">نقد ادا کیا</td><td class="n num">${fq(s.paid)}</td></tr>
    ${s.total>s.paid?`<tr><td colspan="3" class="c-pay">سپلائر کے دینے ہیں</td><td class="n num c-pay">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
    <div class="qr-row" id="billQr"></div>
-   <div class="actions" style="margin-top:12px"><button class="btn primary" data-purpdf="${esc(s.id)}">${PDF_ICON} PDF</button>${(()=>{const c=S.customers.find(x=>x.id===s.supp);WA={bill:[c&&c.phone,waBill(s,true)]};return c&&c.phone?waButtons(c.phone,[["سپلائر کو واٹس ایپ پر بھیجیں","bill"]]):""})()}</div>`);
+   <div class="actions" style="margin-top:12px"><button class="btn primary" data-purpdf="${esc(s.id)}">${PDF_ICON} PDF</button><button class="btn" data-purprint="${esc(s.id)}">${PRINT_ICON} پرنٹ</button>${(()=>{const c=S.customers.find(x=>x.id===s.supp);WA={bill:[c&&c.phone,waBill(s,true)]};return c&&c.phone?waButtons(c.phone,[["سپلائر کو واٹس ایپ پر بھیجیں","bill"]]):""})()}</div>`);
   qrDataUrl(billQrText(s,true)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="QR کوڈ" width="96" height="96"><div><b>خریداری کا QR کوڈ</b></div>`});
 }
 const CATS={in:[["پرانا مال / کباڑ فروخت",1],["کمیشن",1],["کرایہ ملا",1],["متفرق آمدنی",1],["مالک نے رقم ڈالی",0],["بینک سے نکالی",0],["قرض ملا",0]],
@@ -851,7 +855,7 @@ function sheetEntryView(id){
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
-    <div class="actions" style="margin-top:14px"><button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
+    <div class="actions" style="margin-top:14px">${e.sale&&S.sales.some(x=>x.id===e.sale)?`<button class="btn primary" data-salev="${esc(e.sale)}">${PDF_ICON} بل کھولیں (QR / PDF / پرنٹ)</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?`<button class="btn primary" data-purv="${esc(e.purchase)}">${PDF_ICON} بل کھولیں</button>`:""}<button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
   for(const a of att)loadAtt(a);
 }
 const ATT={};
@@ -1125,6 +1129,9 @@ document.addEventListener("click",async ev=>{
   if(ds.billpdf){const x=S.sales.find(v=>v.id===ds.billpdf);if(x)busy(t,()=>billPdf(x));return}
   if(ds.purpdf){const x=S.purchases.find(v=>v.id===ds.purpdf);if(x)busy(t,()=>billPdf(x,true));return}
   if(ds.ledpdf){const x=S.customers.find(v=>v.id===ds.ledpdf);if(x)busy(t,()=>ledgerPdf(x));return}
+  if(ds.billprint){const x=S.sales.find(v=>v.id===ds.billprint);if(x)busy(t,()=>billPdf(x,false,true));return}
+  if(ds.purprint){const x=S.purchases.find(v=>v.id===ds.purprint);if(x)busy(t,()=>billPdf(x,true,true));return}
+  if(ds.ledprint){const x=S.customers.find(v=>v.id===ds.ledprint);if(x)busy(t,()=>ledgerPdf(x,true));return}
   if(ds.sec){const [k,kind]=ds.sec.split(":");busy(t,()=>sectionFile(S.lastReport||reportData(),k,kind));return}
   if(ds.rep){const R=S.lastReport||reportData();busy(t,()=>ds.rep==="xlsx"?sheetsToXlsx(reportSheets(R),"report-"+todayStr()+".xlsx"):reportPdf(R));return}
   if(ds.entvBtn){sheetEntryView(ds.entvBtn);return}
