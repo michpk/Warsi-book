@@ -38,6 +38,19 @@ const branchName=id=>(S.branches.find(b=>b.id===id)||{}).name||"—";
 const inBranch=x=>S.branch==="all"||x.branch===S.branch;
 function balances(){const m={};for(const e of S.entries){m[e.cust]=(m[e.cust]||0)+(e.type==="gave"?1:-1)*(Number(e.amount)||0)}return m}
 const todayStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const ymd=t=>new Date(t-new Date(t).getTimezoneOffset()*6e4).toISOString().slice(0,10);
+/* date picker with quick "today / yesterday / day before" buttons, for entering old records */
+function dateField(id,name,value){
+  const d=k=>ymd(Date.now()-k*864e5);
+  return `<input id="${id}" name="${name}" type="date" dir="ltr" class="date-in" value="${value}" max="${todayStr()}">
+    <div class="date-quick">${[["آج",0],["کل",1],["پرسوں",2]].map(([l,k])=>`<button type="button" data-dset="${id}" data-d="${d(k)}" aria-pressed="${value===d(k)}">${l}</button>`).join("")}<button type="button" data-dstep="${id}" data-k="-1" aria-label="ایک دن پیچھے">− 1 دن</button></div>`;
+}
+/* keep the time of day, change only the date */
+const withDate=(t,dstr)=>{const o=new Date(t),n=new Date(dstr+"T00:00:00");n.setHours(o.getHours(),o.getMinutes(),o.getSeconds(),o.getMilliseconds());return n.getTime()};
+function dateEditHtml(col,x){
+  if(!S.isAdmin)return "";
+  return `<form class="f date-edit" data-form="redate" data-col="${col}" data-id="${esc(x.id)}"><label for="rdDate" class="lbl-sm">تاریخ بدلیں</label>${dateField("rdDate","date",ymd(x.date))}<div class="actions"><button class="btn sm primary">نئی تاریخ محفوظ کریں</button></div></form>`;
+}
 const sumA=a=>a.reduce((x,y)=>x+(Number(y.amt)||0),0);
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
@@ -216,7 +229,7 @@ function vCash(){
   const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
-  <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" value="${d}"></label>
+  <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" dir="ltr" value="${d}" max="${todayStr()}"></label>
     ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button>`:""}</div>
   <div class="stats">
     <div class="card stat"><span class="lbl">پچھلا کیش (حساب سے)</span><span class="val">${fmt(open)}</span></div>
@@ -656,7 +669,7 @@ function sheetCust(id){
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
     <div class="two"><div class="fld"><label for="eAmt">${(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier"?(type==="gave"?"کتنی ادائیگی کی":"کتنے کا مال ملا"):(type==="gave"?"کتنے کا ادھار":"کتنی رقم ملی")}</label><input id="eAmt" name="amount" class="num" inputmode="decimal" required></div>
-    <div class="fld"><label for="eDate">تاریخ</label><input id="eDate" name="date" type="date" value="${new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10)}"></div></div>
+    <div class="fld"><label for="eDate">تاریخ</label>${dateField("eDate","date",todayStr())}</div></div>
     <div class="fld"><label for="eNote">تفصیل</label><input id="eNote" name="note" placeholder="${type==="gave"?"مثلاً 10 بیگ سیمنٹ":"مثلاً نقد / بینک ٹرانسفر"}"></div>
     ${photoPicker()}
     ${S.entries.some(x=>x.cust===S.openCust&&(x.att||[]).length)?`<p class="note" style="margin:0">نئی تصویر لگانے سے اس کھاتے کی پرانی بل والی تصویر ہٹ جائے گی۔</p>`:""}
@@ -852,6 +865,7 @@ function sheetExpView(id){
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
+    ${dateEditHtml("expenses",x)}
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
 }
@@ -878,6 +892,7 @@ function sheetEntryView(id){
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
+    ${dateEditHtml("entries",e)}
     <div class="actions" style="margin-top:14px">${e.sale&&S.sales.some(x=>x.id===e.sale)?`<button class="btn primary" data-salev="${esc(e.sale)}">${PDF_ICON} بل کھولیں (QR / PDF / پرنٹ)</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?`<button class="btn primary" data-purv="${esc(e.purchase)}">${PDF_ICON} بل کھولیں</button>`:""}<button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
   for(const a of att)loadAtt(a);
 }
@@ -920,7 +935,7 @@ function sheetExpense(dir="out"){
   const inc=dir==="in";S.photos=[];S.xMode="cash";S.xDir=dir;
   openSheet(inc?"نئی آمد":"نیا خرچہ",`<form class="f" data-form="expense" data-dir="${dir}">
     <div class="two"><div class="fld"><label for="xAmt">رقم</label>${calcField("xAmt","amount")}</div>
-    <div class="fld"><label for="xDate">تاریخ</label><input id="xDate" name="date" type="date" value="${S.cashDate||todayStr()}"></div></div>
+    <div class="fld"><label for="xDate">تاریخ</label>${dateField("xDate","date",S.cashDate||todayStr())}</div></div>
     <div class="fld"><span class="lbl-sm">${inc?"آمد کی قسم":"خرچے کی قسم"}</span>
       ${(()=>{const {top,rest}=catTop(dir);return `<div class="cat-chips" id="catChips">${top.map(([c,pl,own])=>`<button type="button" class="${own?"own":""}" data-cat="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join("")}</div>
       ${rest.length?`<select id="catMore" aria-label="مزید قسمیں"><option value="">مزید قسمیں (${rest.length}) ▾</option>${rest.map(([c])=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>`:""}`})()}</div>
@@ -1005,6 +1020,16 @@ document.addEventListener("submit",async ev=>{
       if(ok&&S.afterCust){const k=S.afterCust;S.afterCust=null;closeSheet();if(k==="customer"){S.saleCust=ref.id;if(S.saleMode==="cash")S.saleLedger=true}else{S.pSupp=ref.id}render();toast((k==="customer"?"گاہک":"سپلائر")+" بن گیا اور بل میں چن لیا");return}
       if(ok){closeSheet();S.kind=body.kind;S.tab="khata";render();sheetCust(ref.id);toast("کھاتہ بن گیا");return}}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
+  }
+  if(kind==="redate"){
+    const col=f.dataset.col,x=S[col].find(v=>v.id===id);if(!x||!d.date){if(btn)btn.disabled=false;return}
+    const nd=withDate(x.date,d.date);
+    await w(()=>{db.update(col,id,{date:nd});
+      if(col==="expenses")for(const e of S.entries.filter(e=>e.exp===id))db.update("entries",e.id,{date:withDate(e.date,d.date)});
+      if(col==="expenses")for(const e of S.expenses.filter(e=>e.ownFor===id||e.saleFor===id))db.update("expenses",e.id,{date:withDate(e.date,d.date)});});
+    toast("تاریخ بدل گئی: "+new Date(nd).toLocaleDateString("en-GB"));
+    if(col==="entries")sheetEntryView(id);else sheetExpView(id);
+    return;
   }
   if(kind==="entry"){
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
@@ -1130,6 +1155,10 @@ document.addEventListener("click",async ev=>{
   const ds=t.dataset;
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
+  if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
+    let v=ds.dset?ds.d:ymd(new Date((inp.value||todayStr())+"T12:00:00").getTime()+Number(ds.k)*864e5);
+    inp.value=v;inp.dispatchEvent(new Event("change",{bubbles:true}));
+    inp.parentElement.querySelectorAll("[data-dset]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.d===v)));return}
   if(ds.go){S.tab=ds.go;render();return}
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
@@ -1221,6 +1250,8 @@ document.addEventListener("pointermove",e=>{
 document.addEventListener("click",e=>{if(e.target.closest("button"))return;const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.closest){const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv)}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
+document.addEventListener("click",e=>{const i=e.target.closest('input[type="date"]');if(i&&i.showPicker){try{i.showPicker()}catch(x){}}});
+document.addEventListener("change",e=>{const i=e.target;if(i.classList&&i.classList.contains("date-in"))i.parentElement.querySelectorAll("[data-dset]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.d===i.value)))});
 document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!$("#sheet").hidden)closeSheet()});
 $("#branchSel").addEventListener("change",e=>{S.branch=e.target.value;try{localStorage.setItem("hk_branch",S.branch)}catch(x){};render()});
 document.addEventListener("input",e=>{
