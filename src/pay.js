@@ -104,16 +104,17 @@ export async function fillPayBox(amount, sel) {
   if (!document.getElementById("payBox")) return;
   el.innerHTML = `<div class="pay-h"><b>اسکین کر کے ادائیگی کریں</b><span class="pill">${fmt(amount)}</span></div>
     ${list.length > 1 ? `<div class="chips" role="tablist" aria-label="اکاؤنٹ چنیں">${list.map((x, i) => `<button type="button" class="chip" role="tab" data-paysel="${i}" aria-pressed="${i === curSel}">${esc(acctName(x))}</button>`).join("")}</div>` : ""}
-    <div class="pay-body">${q ? `<img src="${q.src}" alt="${esc(acctName(a))} کا ادائیگی QR کوڈ" width="200" height="200">` : ""}
+    <div class="pay-body">${q ? `<img src="${q.src}" alt="${esc(acctName(a))} کا ادائیگی QR کوڈ" width="170" height="170">` : ""}
       <div class="pay-info"><div class="pay-t">${esc(acctName(a))} <span class="note">· ${esc(KINDS[a.kind]?.short || "")}</span></div>${detailRows(a, true)}
         <p class="note" style="margin:0">${q ? (q.withAmt ? `گاہک کسی بھی بینک یا JazzCash / Easypaisa ایپ سے اسکین کرے، رقم ${fmt(amount)} خود آ جائے گی۔` : `گاہک کسی بھی بینک یا موبائل اکاؤنٹ ایپ سے اسکین کر کے ${fmt(amount)} لکھے۔`) : "اس اکاؤنٹ کا QR نہیں لگا۔ گاہک اوپر والے نمبر پر رقم بھیج سکتا ہے۔"}</p></div></div>`;
 }
 
 /* ---------- PDF and WhatsApp ---------- */
-export async function payPdfHtml(amount) {
+export async function payPdfHtml(amount, compact) {
   const list = accts().slice(0, 3); if (!list.length) return "";
   const { esc, fmt } = C;
   const parts = await Promise.all(list.map(async a => { const q = await payQrImage(a, amount, 260); return `<div class="pd-pay1">${q ? `<img src="${q.src}" alt="">` : ""}<div><b>${esc(acctName(a))}</b>${detailRows(a, false)}</div></div>`; }));
+  if (compact) return `<div class="pd-pay sm"><div class="pd-pay-h">اسکین کر کے ادائیگی · <b>${fmt(amount)}</b></div><div class="pd-pay-row">${parts.join("")}</div></div>`;
   return `<div class="pd-pay"><div class="pd-pay-h">ادائیگی کے لیے کسی بھی بینک یا موبائل اکاؤنٹ ایپ سے اسکین کریں · <b>${fmt(amount)}</b></div><div class="pd-pay-row">${parts.join("")}</div></div>`;
 }
 export function payText() {

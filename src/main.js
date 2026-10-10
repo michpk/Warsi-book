@@ -549,7 +549,7 @@ const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
 const saleDue=s=>Math.max(0,Math.round(s.total>s.paid?s.total-s.paid:s.total));
 function billQrText(s,purchase){return `WB-${purchase?"P":"S"}:${s.id}\n${shopTitle()}\n${purchase?"خریداری":"بل"} #${s.no}\n${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||"نقد"}\nکل: Rs ${Math.round(s.total)}\nنقد: Rs ${Math.round(s.paid)}${s.total>s.paid?"\nادھار: Rs "+Math.round(s.total-s.paid):""}`}
 function ledgerQrText(c,v){return `WB-C:${c.id}\n${shopTitle()}\n${c.kind==="supplier"?"سپلائر":"گاہک"}: ${c.name}\n${c.phone||""}\n${v>0?"لینے ہیں":v<0?"دینے ہیں":"حساب برابر"}: Rs ${Math.round(Math.abs(v))}\n${new Date().toLocaleDateString("en-GB")}`}
-const pdfHead=(title,sub)=>`<div class="pd-head"><img src="logo.png" alt=""><div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-tag">Care Your Dreams</div></div><div class="pd-title"><b>${title}</b><span>${sub}</span></div></div>`;
+const pdfHead=(title,sub)=>`<div class="pd-head"><div class="pd-side"><img src="logo.png" alt=""><div class="pd-tag">Care<br>Your Dreams</div></div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-title"><b>${title}</b><span>${sub}</span></div></div>`;
 async function billPdf(s,purchase,print){
   const qr=await qrDataUrl(billQrText(s,purchase),260);
   const html=`${pdfHead(purchase?"خریداری کا بل":"فروخت کا بل","#"+esc(s.no)+" · "+new Date(s.date).toLocaleDateString("en-GB")+" "+new Date(s.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}))}
@@ -563,12 +563,14 @@ async function billPdf(s,purchase,print){
 }
 async function ledgerPdf(c,print){
   const es=S.entries.filter(e=>e.cust===c.id).sort((a,b)=>a.date-b.date);let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}});
-  const sup=c.kind==="supplier",qr=await qrDataUrl(ledgerQrText(c,run),260);
+  const sup=c.kind==="supplier",qr=await qrDataUrl(ledgerQrText(c,run),200);
+  const balLbl=run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر";
   const html=`${pdfHead("کھاتے کی تفصیل",new Date().toLocaleDateString("en-GB"))}
     <div class="pd-party"><div><span>${sup?"سپلائر":"گاہک"}</span><b>${esc(c.name)}</b></div><div><span>فون</span><b dir="ltr">${esc(c.phone||"—")}</b></div><div><span>برانچ</span><b>${esc(branchName(c.branch))}</b></div></div>
+    <div class="pd-top"><div class="pd-qr sm"><img src="${qr}" alt=""><span>کھاتے کا QR</span></div><div class="pd-bal ${run>0?"due":""}"><span>${balLbl}</span><b>${fmt(Math.abs(run))}</b></div>${!sup&&run>0?await payPdfHtml(run,true):""}</div>
     <table class="pd-tbl"><thead><tr><th>تاریخ</th><th>تفصیل</th><th>${sup?"ادائیگی":"دیے"} (+)</th><th>${sup?"مال آیا":"ملے"} (−)</th><th>بقایا</th></tr></thead><tbody>
     ${rows.map(e=>`<tr><td>${new Date(e.date).toLocaleDateString("en-GB")}</td><td>${esc(e.note||"")}</td><td>${e.type==="gave"?fq(e.amount):""}</td><td>${e.type==="got"?fq(e.amount):""}</td><td>${fq(e.run)}</td></tr>`).join("")||`<tr><td colspan="5">کوئی اندراج نہیں</td></tr>`}</tbody></table>
-    <div class="pd-foot"><img src="${qr}" alt=""><div class="pd-tot"><div class="${run>0?"due":""}"><span>${run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر"}</span><b>${fmt(Math.abs(run))}</b></div></div></div>${!sup&&run>0?await payPdfHtml(run):""}`;
+    <div class="pd-foot"><div class="pd-tot"><div class="${run>0?"due":""}"><span>${balLbl}</span><b>${fmt(Math.abs(run))}</b></div></div></div>`;
   return await htmlToPdf(html,"khata-"+(c.name||"").replace(/[^\p{L}\p{N}]+/gu,"-").slice(0,30)+".pdf",{print});
 }
 async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerHTML;btn.textContent="بن رہی ہے…"}try{const r=await fn();if(typeof r==="string"&&r.startsWith("Documents"))toast("فائل فون میں محفوظ: "+r);else if(r==="printed")toast("پرنٹ کھل گیا");else if(r!=="cancelled")toast("فائل تیار")}catch(e){console.error(e);toast("فائل نہیں بن سکی: "+(e&&e.message||e))}finally{if(btn){btn.disabled=false;btn.innerHTML=btn.dataset.lbl}}}
