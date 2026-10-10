@@ -589,7 +589,6 @@ async function ledgerPdf(c,print){
   const balLbl=run>0?(sup?"آپ کے ذمے":"آپ کے ذمے باقی"):run<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر";
   const html=`${pdfHead("کھاتے کی تفصیل",new Date().toLocaleDateString("en-GB"),qr)}
     <div class="pd-party"><div><span>${sup?"سپلائر":"گاہک"}</span><b>${esc(c.name)}</b></div><div><span>فون</span><b dir="ltr">${esc(c.phone||"—")}</b></div><div><span>برانچ</span><b>${esc(branchName(c.branch))}</b></div></div>
-    <div class="pd-top"><div class="pd-bal ${run>0?"due":""}"><span>${balLbl}</span><b>${fmt(Math.abs(run))}</b></div></div>
     <table class="pd-tbl"><thead><tr><th>تاریخ</th><th>تفصیل</th><th>${sup?"ادائیگی":"دیے"} (+)</th><th>${sup?"مال آیا":"ملے"} (−)</th><th>بقایا</th></tr></thead><tbody>
     ${rows.map(e=>`<tr><td>${new Date(e.date).toLocaleDateString("en-GB")}</td><td>${esc(e.note||"")}</td><td>${e.type==="gave"?fq(e.amount):""}</td><td>${e.type==="got"?fq(e.amount):""}</td><td>${fq(e.run)}</td></tr>`).join("")||`<tr><td colspan="5">کوئی اندراج نہیں</td></tr>`}</tbody></table>
     <div class="pd-foot"><div class="pd-tot"><div class="${run>0?"due":""}"><span>${balLbl}</span><b>${fmt(Math.abs(run))}</b></div></div></div>${!sup&&run>0?`<div class="pd-p1foot">${await payPdfHtml(run)}</div>`:""}`;
