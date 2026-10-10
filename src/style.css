@@ -363,3 +363,7 @@ button.stat.tile:hover{border-color:var(--accent)}
 .pdf-page .pd-pay.sm .pd-pay1{min-width:180px;gap:8px}
 .pdf-page .pd-pay.sm .pd-pay1 img{width:68px;height:68px}
 .pdf-page .pd-pay.sm .pay-d{font-size:11px}
+.pd-title > div{display:flex;flex-direction:column}
+.pd-title.has-qr{flex-direction:row;align-items:center;gap:10px}
+.pd-head img.pd-hqr{height:78px;width:78px}
+.pdf-page .pd-p1foot .pd-pay{margin-top:0}

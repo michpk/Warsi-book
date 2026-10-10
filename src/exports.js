@@ -17,11 +17,13 @@ export async function htmlToPdf(html, filename, opts = {}) {
   try {
     await document.fonts.ready;
     await Promise.all([...host.querySelectorAll("img")].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+    if (opts.layout) opts.layout(host, host.offsetWidth * 841.89 / 595.28);   // A4 page height in CSS px
     const canvas = await html2canvas(host, { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 794 });
     const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
     const pw = pdf.internal.pageSize.getWidth(), ph = pdf.internal.pageSize.getHeight();
     const pageH = Math.floor(canvas.width * ph / pw);
     for (let y = 0, i = 0; y < canvas.height; y += pageH, i++) {
+      if (i && canvas.height - y < 120) break;               // only bottom padding left: no empty last page
       const slice = document.createElement("canvas"); slice.width = canvas.width; slice.height = Math.min(pageH, canvas.height - y);
       slice.getContext("2d").drawImage(canvas, 0, y, canvas.width, slice.height, 0, 0, canvas.width, slice.height);
       if (i) pdf.addPage();
