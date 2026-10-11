@@ -405,4 +405,6 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .exp-edit[open] summary{margin-bottom:8px}
 .stats.three > :last-child{grid-column:1/-1}
 @media (min-width:640px){.stats.three{grid-template-columns:repeat(3,minmax(0,1fr))}.stats.three > :last-child{grid-column:auto}}
-.led-row.no-till{opacity:.6}
+.led-row.no-till{background:color-mix(in srgb,#1e63c9 7%,transparent)}
+.led-row.no-till,.led-row.no-till .n,.led-row.no-till .meta{color:#1e63c9 !important}
+@media (prefers-color-scheme:dark){.led-row.no-till,.led-row.no-till .n,.led-row.no-till .meta{color:#7fb0ff !important}}
