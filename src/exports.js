@@ -13,6 +13,7 @@ export async function htmlToPdf(html, filename, opts = {}) {
   const host = document.createElement("div");
   host.className = "pdf-page"; host.setAttribute("dir", "rtl"); host.setAttribute("lang", "ur");
   host.innerHTML = html;
+  fixLatin(host);
   document.body.appendChild(host);
   try {
     await document.fonts.ready;
@@ -61,4 +62,26 @@ function printBlob(blob) {
   f.onload = () => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { window.open(url, "_blank"); } setTimeout(() => { f.remove(); URL.revokeObjectURL(url); }, 60000); };
   document.body.appendChild(f);
   return "printed";
+}
+
+/* html2canvas draws RTL pages word by word and can lose the spaces inside English names
+   ("Ali Traders" -> "AliTraders"). Wrap each English run in its own left-to-right span and
+   join its words with non-breaking spaces, so the whole name is drawn in one piece. */
+function fixLatin(root) {
+  const re = /[A-Za-z0-9][A-Za-z0-9 .,&'()\/+#:_-]*[A-Za-z0-9.)]/g;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const nodes = []; for (let n = walker.nextNode(); n; n = walker.nextNode()) if (/[A-Za-z]/.test(n.nodeValue) && / /.test(n.nodeValue)) nodes.push(n);
+  for (const n of nodes) {
+    const t = n.nodeValue, frag = document.createDocumentFragment(); let last = 0, hit = false;
+    for (const m of t.matchAll(re)) {
+      if (!/[A-Za-z]/.test(m[0]) || !/ /.test(m[0])) continue;
+      hit = true;
+      if (m.index > last) frag.appendChild(document.createTextNode(t.slice(last, m.index)));
+      const sp = document.createElement("span"); sp.className = "lt"; sp.dir = "ltr"; sp.style.unicodeBidi = "isolate"; sp.style.whiteSpace = "nowrap";
+      sp.textContent = m[0].replace(/ /g, "\u00a0"); frag.appendChild(sp); last = m.index + m[0].length;
+    }
+    if (!hit) continue;
+    if (last < t.length) frag.appendChild(document.createTextNode(t.slice(last)));
+    n.parentNode.replaceChild(frag, n);
+  }
 }
