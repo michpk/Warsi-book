@@ -81,6 +81,16 @@ test("attachments: staff/manager add and read photos; others cannot", async () =
   await assertFails(getDoc(doc(pend, "attachments/a1")));
 });
 
+test("shared photos: staff creates, anyone with the link can open, nobody can list", async () => {
+  const mg = ctx("mg1", "mgr@test.pk");
+  await assertSucceeds(setDoc(doc(mg, "shared/s1"), { data: "data:image/jpeg;base64,AAAA", shop: "x" }));
+  const anon = env.unauthenticatedContext().firestore();
+  await assertSucceeds(getDoc(doc(anon, "shared/s1")));
+  await assertFails(getDocs(collection(anon, "shared")));
+  await assertFails(setDoc(doc(anon, "shared/s2"), { data: "x" }));
+  await assertFails(updateDoc(doc(mg, "shared/s1"), { data: "y" }));
+});
+
 test("disabled staff loses access", async () => {
   await assertFails(getDoc(doc(ctx("st1", "staff@test.pk"), "items/i1")));
 });

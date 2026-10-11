@@ -181,6 +181,9 @@ export async function getAttachment(id) {
   return s.exists() ? s.data() : null;
 }
 export function deleteAttachment(id) { fire(deleteDoc(doc(fs, "attachments", id))); }
+// A copy of a bill photo that can be opened by link (for customers / suppliers, without signing in).
+export function sharedId() { return doc(collection(fs, "shared")).id + doc(collection(fs, "shared")).id.slice(0, 8); }
+export function putShared(id, data) { fire(setDoc(doc(fs, "shared", id), { ...data, at: Date.now() })); }
 export function attachmentId() { return doc(collection(fs, "attachments")).id; }
 export function setRole(uid, role, branch) {
   db.update("users", uid, branch === undefined ? { role } : { role, branch });

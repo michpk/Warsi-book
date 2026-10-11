@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>بل کی تصویر · وارثی بک</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{--bg:#eceeea;--card:#fbfcfa;--fg:#1b241f;--muted:#5a6660;--brand:#0b2b33;--gold:#d6a545;--btn:#0d4a45}
+  @media (prefers-color-scheme:dark){:root{--bg:#111613;--card:#18201c;--fg:#e5ece8;--muted:#98a69f}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans Arabic",Tahoma,system-ui,sans-serif;min-height:100vh}
+  header{background:linear-gradient(135deg,#0b2b33,#0d4a45 60%,#11705a);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:12px;border-bottom:3px solid var(--gold)}
+  header img{width:44px;height:44px;border-radius:10px;background:#fff1}
+  header b{display:block;font-size:18px}
+  header small{opacity:.8;letter-spacing:.12em;font-size:11px;direction:ltr;display:block;text-align:right}
+  main{max-width:820px;margin:0 auto;padding:16px}
+  .card{background:var(--card);border-radius:14px;padding:12px;box-shadow:0 1px 3px #0002}
+  .card img{width:100%;height:auto;display:block;border-radius:8px;background:#fff}
+  .meta{color:var(--muted);font-size:14px;margin:10px 2px}
+  .btn{display:flex;justify-content:center;align-items:center;gap:8px;background:var(--btn);color:#fff;text-decoration:none;border:0;border-radius:12px;padding:12px 16px;font:inherit;font-size:16px;font-weight:600;margin-top:12px;cursor:pointer}
+  .msg{text-align:center;padding:40px 10px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header><img src="logo.png" alt=""><div><b id="shop">وارثی ہارڈویئر</b><small>CARE YOUR DREAMS</small></div></header>
+<main id="m"><p class="msg">تصویر لوڈ ہو رہی ہے…</p></main>
+<script>
+(async () => {
+  const m = document.getElementById("m");
+  const id = (location.hash.slice(1) || new URLSearchParams(location.search).get("id") || "").replace(/[^A-Za-z0-9]/g, "");
+  if (!id) { m.innerHTML = '<p class="msg">لنک درست نہیں۔</p>'; return; }
+  const url = "https://firestore.googleapis.com/v1/projects/warsi-book/databases/(default)/documents/shared/" + id + "?key=AIzaSyB872SiO5whQxQ1_waAPpgrXVzqJblC6Ow";
+  let doc = null;
+  for (let i = 0; i < 4 && !doc; i++) {
+    try { const r = await fetch(url); if (r.ok) doc = await r.json(); } catch (e) {}
+    if (!doc) await new Promise(r => setTimeout(r, 2500));
+  }
+  if (!doc || !doc.fields || !doc.fields.data) { m.innerHTML = '<p class="msg">تصویر نہیں ملی۔ ہو سکتا ہے ابھی اپ لوڈ ہو رہی ہو، تھوڑی دیر بعد دوبارہ کھولیں۔</p>'; return; }
+  const f = k => (doc.fields[k] && doc.fields[k].stringValue) || "";
+  if (f("shop")) document.getElementById("shop").textContent = f("shop");
+  const data = f("data"), esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  m.innerHTML = `<div class="card"><img src="${data}" alt="بل کی تصویر"></div>
+    <p class="meta">${esc(f("title") || "بل کی تصویر")}${f("date") ? " · " + esc(f("date")) : ""}</p>
+    <a class="btn" download="bill-${id.slice(0, 8)}.jpg" href="${data}">⬇ تصویر ڈاؤن لوڈ کریں</a>`;
+})();
+</script>
+</body>
+</html>

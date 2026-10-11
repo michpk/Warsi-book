@@ -1,5 +1,5 @@
 import "./style.css";
-import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
+import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
 import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts } from "./pay.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
@@ -632,13 +632,26 @@ function waButtons(phone,pairs){
 }
 const WA_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3z"/></svg>';
 let WA={};
+/* Link(s) to the ledger's latest bill photo, for WhatsApp / SMS. The link id is made at once; the photo
+   copy is uploaded in the background (the viewer page waits a few seconds if it is not there yet). */
+const SITE="https://michpk.github.io/Warsi-book/";
+function photoLinkText(entId){
+  const e=entId&&S.entries.find(x=>x.id===entId);if(!e||!(e.att||[]).length)return "";
+  const ids={...(e.shareIds||{})};let changed=false;const c=S.customers.find(x=>x.id===e.cust)||{};
+  const links=e.att.slice(0,3).map(a=>{let sid=ids[a];
+    if(!sid){sid=sharedId();ids[a]=sid;changed=true;
+      (ATT[a]?Promise.resolve(ATT[a]):getAttachment(a)).then(d=>{if(d&&d.data){ATT[a]=d;putShared(sid,{data:d.data,shop:shopTitle(),title:"بل کی تصویر · "+(c.name||""),date:new Date(e.date).toLocaleDateString("en-GB")})}}).catch(console.error)}
+    return SITE+"v.html#"+sid});
+  if(changed&&S.canWrite)db.update("entries",e.id,{shareIds:ids});
+  return "\n\n"+(links.length>1?"بل کی تصویریں:\n":"بل کی تصویر: ")+links.join("\n");
+}
 const SMS_ICON='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 10h8M8 13h5"/></svg>';
 function sheetCust(id){
   const c=S.customers.find(x=>x.id===id);if(!c)return;S.openCust=id;
   const es=S.entries.filter(e=>e.cust===id).sort((a,b)=>a.date-b.date);
   let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}}).reverse();
   const v=run;
-  WA={remind:[c.phone,waReminder(c,v)],stmt:[c.phone,waStatement(c,rows,v)]};
+  {const pe=[...es].reverse().find(x=>(x.att||[]).length);WA={remind:[c.phone,waReminder(c,v),pe&&pe.id],stmt:[c.phone,waStatement(c,rows,v),pe&&pe.id]};}
   openSheet(c.name,`
    <div class="bal-box ${v>0?"owe":v<0?"pay":"zero"}"><div><div class="note">${v>0?"آپ نے لینے ہیں":v<0?"آپ نے دینے ہیں":"حساب برابر ہے"}</div><div class="v ${v>0?"c-owe":v<0?"c-pay":""}">${fmt(Math.abs(v))}</div></div>
      <div class="note"><span class="num">${esc(c.phone||"")}</span><br>${esc(branchName(c.branch))}</div></div>
@@ -649,15 +662,18 @@ function sheetCust(id){
        ${S.canWrite&&last?`<div class="pc-btns"><label class="btn primary" for="ledCam">${CAM_ICON} کیمرے سے تصویر</label><label class="btn" for="ledGal">${GAL_ICON} گیلری سے</label></div>
        <input type="file" id="ledCam" accept="image/*" capture="environment" hidden data-ent="${esc(last.id)}"><input type="file" id="ledGal" accept="image/*" hidden data-ent="${esc(last.id)}">`:""}</div>`})()}
    <div id="entryForm"></div>
-   <div class="chips" style="margin:12px 0">
-     ${waButtons(c.phone,[[c.kind==="supplier"?"حساب کا پیغام":"بقایا یاددہانی","remind"],["پورا کھاتہ بھیجیں","stmt"]])}
-     ${S.canWrite?`<button class="btn sm" data-editcust="${esc(c.id)}">ترمیم</button>`:""}
-     ${S.isAdmin?`<button class="btn sm danger" data-delcust="${esc(c.id)}">کھاتہ حذف کریں</button>`:""}
-   </div><div id="delCustBox"></div>
-   <div class="send-card"><div class="send-h">${PRINT_ICON}<b>${c.kind==="supplier"?"سپلائر":"گاہک"} کو کھاتہ بھیجیں یا پرنٹ کریں</b></div>
-     <div class="chips">${waButtons(c.phone,[["کھاتہ واٹس ایپ کریں","stmt"]])}</div>
-     <div class="chips"><button class="btn primary sm" data-ledpdf="${esc(c.id)}">${PDF_ICON} کھاتہ PDF بھیجیں</button><button class="btn sm" data-ledprint="${esc(c.id)}">${PRINT_ICON} پرنٹ</button></div>
-     <p class="note" style="margin:0">PDF میں پورا کھاتہ، بقایا اور QR کوڈ${c.kind!=="supplier"&&v>0?" (ادائیگی کا QR بھی)":""} ہوتا ہے۔ فون پر "PDF بھیجیں" دبا کر واٹس ایپ چنیں۔ کسی ایک بل کا QR چاہیے تو نیچے اس بل کے سامنے "بل" دبائیں۔</p></div>
+   ${(()=>{const sup=c.kind==="supplier",okPh=String(c.phone||"").replace(/\D/g,"").length>=10,pe=[...es].reverse().find(x=>(x.att||[]).length);
+     const row=(label,key)=>`<div class="send-row"><span class="send-l">${label}</span><button class="btn sm wa" data-wa="${key}">${WA_ICON}واٹس ایپ</button><button class="btn sm sms" data-sms="${key}">${SMS_ICON}SMS</button></div>`;
+     return `<div class="send-card"><div class="send-h">${WA_ICON}<b>${sup?"سپلائر":"گاہک"} کو بھیجیں</b></div>
+     <div class="send-grid">
+       ${row(sup?"حساب کا پیغام":"بقایا یاددہانی","remind")}
+       ${row("پورا کھاتہ","stmt")}
+       <div class="send-row"><span class="send-l">کھاتہ PDF</span><button class="btn sm primary" data-ledpdf="${esc(c.id)}">${PDF_ICON}بھیجیں</button><button class="btn sm" data-ledprint="${esc(c.id)}">${PRINT_ICON}پرنٹ</button></div>
+     </div>
+     ${pe?`<p class="note send-n">${CAM_ICON} واٹس ایپ / SMS کے ساتھ بل کی تازہ تصویر کا لنک بھی جائے گا، جسے ${sup?"سپلائر":"گاہک"} کھول کر ڈاؤن لوڈ کر سکے گا۔</p>`:""}
+     ${okPh?"":`<p class="note send-n">فون نمبر نہیں لگا — واٹس ایپ میں نمبر خود چن لیں۔</p>`}
+     </div>`})()}
+   ${S.canWrite||S.isAdmin?`<div class="cust-tools">${S.canWrite?`<button class="btn ghost sm" data-editcust="${esc(c.id)}">✎ ترمیم</button>`:""}${S.isAdmin?`<button class="btn ghost sm danger" data-delcust="${esc(c.id)}">کھاتہ حذف کریں</button>`:""}</div>`:""}<div id="delCustBox"></div>
    ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
@@ -1201,8 +1217,8 @@ document.addEventListener("click",async ev=>{
   if(ds.bk){S.bulkKind=ds.bk;document.querySelectorAll("[data-bk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.bk===ds.bk));return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
-  if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
-  if(ds.sms){const x=WA[ds.sms];if(x)openSMS(x[0],x[1]);return}
+  if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]+photoLinkText(x[2]));return}
+  if(ds.sms){const x=WA[ds.sms];if(x)openSMS(x[0],x[1]+photoLinkText(x[2]));return}
   if(ds.rp){if(ds.rp==="custom"&&S.rp!=="custom"){const R0=rRange();S.rFrom=ymd(R0[0]);S.rTo=ymd(R0[1]-1)}S.rp=ds.rp;render();if(ds.rp==="custom")setTimeout(()=>{const i=$("#rFrom");if(i){i.scrollIntoView({block:"center"});i.focus()}},50);return}
   if(ds.csv){exportCsv(ds.csv);return}
   if(ds.purv){sheetPurchase(ds.purv);return}

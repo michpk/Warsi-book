@@ -389,3 +389,13 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .pdf-page .pd-sub span[dir="ltr"]{font-family:"IBM Plex Mono",monospace}
 .pdf-page .pd-sub i{font-style:normal;color:#b0b8b2}
 .pdf-page .pd-title .pd-sub span[dir="rtl"]{font-family:"Noto Sans Arabic",Tahoma,sans-serif;direction:rtl}
+/* ledger: send to customer / supplier */
+.send-grid{display:flex;flex-direction:column;gap:8px}
+.send-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:8px;padding:6px 0;border-top:1px dashed var(--line)}
+.send-row:first-child{border-top:0;padding-top:0}
+.send-l{font-weight:600;font-size:14px}
+.send-row .btn{min-width:92px;justify-content:center}
+.send-n{margin:0;display:flex;gap:6px;align-items:flex-start}
+.send-n svg{flex:none;margin-top:3px}
+.cust-tools{display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 10px}
+@media (max-width:380px){.send-row .btn{min-width:0}}
