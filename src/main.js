@@ -47,6 +47,20 @@ function dateField(id,name,value){
 }
 /* keep the time of day, change only the date */
 const withDate=(t,dstr)=>{const o=new Date(t),n=new Date(dstr+"T00:00:00");n.setHours(o.getHours(),o.getMinutes(),o.getSeconds(),o.getMilliseconds());return n.getTime()};
+/* change the category / details of a saved income or expense (and of the records made with it) */
+function expEditHtml(x){
+  if(!S.canWrite)return "";
+  const parent=x.ownFor||x.saleFor;
+  if(parent&&S.expenses.some(e=>e.id===parent))return `<div class="actions" style="margin-top:12px"><button type="button" class="btn sm" data-expv-btn="${esc(parent)}">✎ اصل خرچہ کھول کر قسم بدلیں</button></div>`;
+  const inc=x.dir==="in",cat=expCat(x),det=String(x.note||"").split(" · ").slice(1).join(" · ");
+  return `<details class="exp-edit"><summary>✎ قسم یا تفصیل بدلیں</summary>
+    <form class="f" data-form="expedit" data-id="${esc(x.id)}">
+      <div class="fld"><label for="eeCat">${inc?"آمد کی قسم":"خرچے کی قسم"}</label><input id="eeCat" name="cat" list="eeCats" value="${esc(cat)}" required autocomplete="off">
+        <datalist id="eeCats">${catList(inc?"in":"out").map(([c])=>`<option value="${esc(c)}"></option>`).join("")}</datalist></div>
+      <div class="fld"><label for="eeNote">تفصیل</label><input id="eeNote" name="note" value="${esc(det)}"></div>
+      <p class="note" style="margin:0">${x.supp||x.own||x.tillSale?"سپلائر کے کھاتے، اپنی جیب اور گلّے والے اندراجات میں بھی نئی قسم لکھی جائے گی۔ رقم نہیں بدلے گی۔":"رقم نہیں بدلے گی، صرف قسم اور تفصیل۔"}</p>
+      <div class="actions"><button class="btn sm primary">محفوظ کریں</button></div></form></details>`;
+}
 function dateEditHtml(col,x){
   if(!S.isAdmin)return "";
   return `<form class="f date-edit" data-form="redate" data-col="${col}" data-id="${esc(x.id)}"><label for="rdDate" class="lbl-sm">تاریخ بدلیں</label>${dateField("rdDate","date",ymd(x.date))}<div class="actions"><button class="btn sm primary">نئی تاریخ محفوظ کریں</button></div></form>`;
@@ -884,6 +898,7 @@ function sheetExpView(id){
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
+    ${expEditHtml(x)}
     ${dateEditHtml("expenses",x)}
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
@@ -911,6 +926,7 @@ function sheetEntryView(id){
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
+    ${e.exp&&S.expenses.some(x=>x.id===e.exp)?`<div class="actions" style="margin-top:12px"><button type="button" class="btn sm" data-expv-btn="${esc(e.exp)}">✎ روزنامچہ والا خرچہ کھولیں (قسم بدلیں)</button></div>`:""}
     ${dateEditHtml("entries",e)}
     <div class="actions" style="margin-top:14px">${e.sale&&S.sales.some(x=>x.id===e.sale)?`<button class="btn primary" data-salev="${esc(e.sale)}">${PDF_ICON} بل کھولیں (QR / PDF / پرنٹ)</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?`<button class="btn primary" data-purv="${esc(e.purchase)}">${PDF_ICON} بل کھولیں</button>`:""}<button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
   for(const a of att)loadAtt(a);
@@ -1043,6 +1059,15 @@ document.addEventListener("submit",async ev=>{
       if(ok&&S.afterCust){const k=S.afterCust;S.afterCust=null;closeSheet();if(k==="customer"){S.saleCust=ref.id;if(S.saleMode==="cash")S.saleLedger=true}else{S.pSupp=ref.id}render();toast((k==="customer"?"گاہک":"سپلائر")+" بن گیا اور بل میں چن لیا");return}
       if(ok){closeSheet();S.kind=body.kind;S.tab="khata";render();sheetCust(ref.id);toast("کھاتہ بن گیا");return}}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
+  }
+  if(kind==="expedit"){
+    const x=S.expenses.find(v=>v.id===id);const cat=(d.cat||"").trim();if(!x||!cat){if(btn)btn.disabled=false;return}
+    const inc=x.dir==="in",oldCat=expCat(x),known=catList(inc?"in":"out").find(([c])=>c===cat);
+    const note=cat+(d.note.trim()?" · "+d.note.trim():"");
+    await w(()=>{db.update("expenses",id,{note,...(known?{pl:known[1]}:{})});
+      for(const e of S.entries.filter(e=>e.exp===id))db.update("entries",e.id,{note:String(e.note||"").startsWith("خرچہ (نقد ادا)")?"خرچہ (نقد ادا): "+cat:"خرچہ: "+note});
+      for(const e of S.expenses.filter(e=>e.ownFor===id||e.saleFor===id))db.update("expenses",e.id,{note:String(e.note||"").replace(" · "+oldCat," · "+cat)});});
+    toast("قسم بدل گئی: "+cat);sheetExpView(id);return;
   }
   if(kind==="redate"){
     const col=f.dataset.col,x=S[col].find(v=>v.id===id);if(!x||!d.date){if(btn)btn.disabled=false;return}
@@ -1178,6 +1203,7 @@ document.addEventListener("click",async ev=>{
   const ds=t.dataset;
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
+  if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
   if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
     let v=ds.dset?ds.d:ymd(new Date((inp.value||todayStr())+"T12:00:00").getTime()+Number(ds.k)*864e5);
     inp.value=v;inp.dispatchEvent(new Event("change",{bubbles:true}));
