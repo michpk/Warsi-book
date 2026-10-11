@@ -565,7 +565,7 @@ const shopTitle=()=>S.shopName||"وارثی ہارڈویئر";
 const saleDue=s=>Math.max(0,Math.round(s.total>s.paid?s.total-s.paid:s.total));
 function billQrText(s,purchase){return `WB-${purchase?"P":"S"}:${s.id}\n${shopTitle()}\n${purchase?"خریداری":"بل"} #${s.no}\n${new Date(s.date).toLocaleDateString("en-GB")}\n${s.custName||s.suppName||"نقد"}\nکل: Rs ${Math.round(s.total)}\nنقد: Rs ${Math.round(s.paid)}${s.total>s.paid?"\nادھار: Rs "+Math.round(s.total-s.paid):""}`}
 function ledgerQrText(c,v){return `WB-C:${c.id}\n${shopTitle()}\n${c.kind==="supplier"?"سپلائر":"گاہک"}: ${c.name}\n${c.phone||""}\n${v>0?"لینے ہیں":v<0?"دینے ہیں":"حساب برابر"}: Rs ${Math.round(Math.abs(v))}\n${new Date().toLocaleDateString("en-GB")}`}
-const pdfHead=(title,sub,qr)=>`<div class="pd-head"><div class="pd-side"><img src="logo.png" alt=""><div class="pd-tag">Care<br>Your Dreams</div></div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-title${qr?" has-qr":""}">${qr?`<img class="pd-hqr" src="${qr}" alt="">`:""}<div><b>${title}</b><span>${sub}</span></div></div></div>`;
+const pdfHead=(title,sub,qr)=>`<div class="pd-head"><div class="pd-side"><img src="logo.png" alt=""><div class="pd-tag">Care<br>Your Dreams</div></div><div class="pd-shop">${esc(shopTitle())}</div><div class="pd-title${qr?" has-qr":""}">${qr?`<img class="pd-hqr" src="${qr}" alt="">`:""}<div><b>${title}</b><div class="pd-sub">${String(sub).split(" · ").map(x=>`<span dir="${/[\u0600-\u06ff]/.test(x)?"rtl":"ltr"}">${x}</span>`).join('<i>·</i>')}</div></div></div></div>`;
 /* Ledger PDF: keep the payment QR block at the bottom of page 1. The table is split where page 1 ends
    and continues (with its header row again) on page 2. */
 function payAtPage1End(host,pageH){

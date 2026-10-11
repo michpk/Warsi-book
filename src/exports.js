@@ -13,11 +13,11 @@ export async function htmlToPdf(html, filename, opts = {}) {
   const host = document.createElement("div");
   host.className = "pdf-page"; host.setAttribute("dir", "rtl"); host.setAttribute("lang", "ur");
   host.innerHTML = html;
-  fixLatin(host);
   document.body.appendChild(host);
   try {
     await document.fonts.ready;
     await Promise.all([...host.querySelectorAll("img")].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+    rasterizeText(host);
     if (opts.layout) opts.layout(host, host.offsetWidth * 841.89 / 595.28);   // A4 page height in CSS px
     const canvas = await html2canvas(host, { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: 794 });
     const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "portrait" });
@@ -64,24 +64,44 @@ function printBlob(blob) {
   return "printed";
 }
 
-/* html2canvas draws RTL pages word by word and can lose the spaces inside English names
-   ("Ali Traders" -> "AliTraders"). Wrap each English run in its own left-to-right span and
-   join its words with non-breaking spaces, so the whole name is drawn in one piece. */
-function fixLatin(root) {
-  const re = /[A-Za-z0-9][A-Za-z0-9 .,&'()\/+#:_-]*[A-Za-z0-9.)]/g;
+/* html2canvas draws text word by word (or letter by letter) at positions it measures itself. With Urdu
+   and mixed Urdu/English text that goes wrong on some computers: spaces disappear from English names
+   ("Mehboob Plaza" -> "MehboobPlaza") and Nastaliq letters drift apart. So before taking the picture,
+   every single-line piece of text is drawn by the browser itself in one go onto a small canvas, which
+   html2canvas then copies as an image. Text that wraps over several lines is left as it is. */
+function rasterizeText(root) {
+  const SCALE = 3;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes = []; for (let n = walker.nextNode(); n; n = walker.nextNode()) if (/[A-Za-z]/.test(n.nodeValue) && / /.test(n.nodeValue)) nodes.push(n);
+  const nodes = []; for (let n = walker.nextNode(); n; n = walker.nextNode()) if (n.nodeValue.trim()) nodes.push(n);
+  const jobs = [];
   for (const n of nodes) {
-    const t = n.nodeValue, frag = document.createDocumentFragment(); let last = 0, hit = false;
-    for (const m of t.matchAll(re)) {
-      if (!/[A-Za-z]/.test(m[0]) || !/ /.test(m[0])) continue;
-      hit = true;
-      if (m.index > last) frag.appendChild(document.createTextNode(t.slice(last, m.index)));
-      const sp = document.createElement("span"); sp.className = "lt"; sp.dir = "ltr"; sp.style.unicodeBidi = "isolate"; sp.style.whiteSpace = "nowrap";
-      sp.textContent = m[0].replace(/ /g, "\u00a0"); frag.appendChild(sp); last = m.index + m[0].length;
-    }
-    if (!hit) continue;
-    if (last < t.length) frag.appendChild(document.createTextNode(t.slice(last)));
-    n.parentNode.replaceChild(frag, n);
+    const el = n.parentElement; if (!el) continue;
+    const cs = getComputedStyle(el);
+    if (cs.letterSpacing !== "normal" && parseFloat(cs.letterSpacing) !== 0) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    const rects = [...rg.getClientRects()].filter(x => x.width > 0.5);
+    if (rects.length !== 1) continue;
+    jobs.push({ n, cs, r: rects[0] });
+  }
+  for (const { n, cs, r } of jobs) {
+    let text = n.nodeValue.replace(/\s+/g, " ");
+    if (cs.textTransform === "uppercase") text = text.toUpperCase();
+    const lead = /^\s/.test(text), trail = /\s$/.test(text);
+    const c = document.createElement("canvas");
+    const P = Math.ceil(r.height * 0.6), W = r.width + 4;          // room for tall Urdu letters and dots
+    c.width = Math.ceil(W * SCALE); c.height = Math.ceil((r.height + 2 * P) * SCALE);
+    const g = c.getContext("2d"); g.scale(SCALE, SCALE);
+    g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const dir = cs.direction;
+    g.direction = dir; g.textAlign = dir === "rtl" ? "right" : "left"; g.textBaseline = "alphabetic"; g.fillStyle = cs.color;
+    const m = g.measureText("Hg\u0647");
+    const asc = m.fontBoundingBoxAscent || r.height * 0.8, desc = m.fontBoundingBoxDescent || r.height * 0.2;
+    const top = (r.height - asc - desc) / 2 + asc;
+    // draw the text without its outer spaces, placed where the browser placed it
+    const core = text.trim(), extra = Math.max(0, r.width - g.measureText(core).width);
+    const startGap = extra < 1 ? 0 : lead ? (trail ? extra / 2 : extra) : 0;      // space before the text (logical start)
+    g.fillText(core, dir === "rtl" ? 2 + r.width - startGap : 2 + startGap, P + top);
+    c.style.cssText = `width:${W}px;height:${r.height + 2 * P}px;margin:${-P}px -2px;display:inline-block;vertical-align:${-((r.height - asc - desc) / 2 + desc)}px`;
+    n.replaceWith(c);
   }
 }
