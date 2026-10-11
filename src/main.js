@@ -58,8 +58,8 @@ function dateEditHtml(col,x){
   return `<form class="f date-edit" data-form="redate" data-col="${col}" data-id="${esc(x.id)}"><label for="rdDate" class="lbl-sm">تاریخ بدلیں</label>${dateField("rdDate","date",ymd(x.date))}<div class="actions"><button class="btn sm primary">نئی تاریخ محفوظ کریں</button></div></form>`;
 }
 const sumA=a=>a.reduce((x,y)=>x+(y.noTill?0:Number(y.amt)||0),0);
-/* money the owner put in by hand is earlier sales money he had taken home, so it is not added to the till again
-   (the "own pocket" part of an expense still is, because it balances that expense) */
+/* money the owner puts in (by hand, or the "own pocket" part of an expense) is earlier sales money he had
+   taken home, so it is not added to the till again */
 const OWNER_IN="مالک نے رقم ڈالی";
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
@@ -68,7 +68,7 @@ function cashFlow(from,to){
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!x.ownFor&&expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
@@ -251,7 +251,7 @@ function vCash(){
     <section class="card"><div class="card-h"><h3>ادائیگی و خرچ</h3><span class="pill owe num">${fmt(tout)}</span></div>
       ${out.length?`<div class="led" style="border:0;border-radius:0">${rowsOf(out,"c-owe")}</div>`:`<div class="empty">اس دن کوئی ادائیگی یا خرچہ نہیں۔ بجلی، کرایہ، تنخواہ جیسے خرچے "+ خرچہ" سے لکھیں۔</div>`}</section>
   </div>
-  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری، اور ہاتھ سے لکھی آمد اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔ ہاتھ سے لکھی "مالک نے رقم ڈالی" گلّے کے کیش میں نہیں جوڑی جاتی، کیونکہ یہ پہلے کی سیل کی ہی رقم ہوتی ہے۔</p>`;
+  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری، اور ہاتھ سے لکھی آمد اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔ "مالک نے رقم ڈالی" (ہاتھ سے لکھی ہو یا خرچے میں "اپنی جیب سے") نیلے رنگ میں دکھائی جاتی ہے اور گلّے کے کیش میں نہیں جوڑی جاتی، کیونکہ یہ پہلے کی سیل کی ہی رقم ہوتی ہے۔</p>`;
 }
 /* ---------- reports ---------- */
 function rRange(){
@@ -945,7 +945,7 @@ function syncOwn(){
   const amt=calcEval(($("#xAmt")||{}).value)||0,v=(($("#xSupp")||{}).value||"").trim(),led=v&&($("#xLedger")||{}).checked;
   const cash=!led?amt:S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
   h.classList.toggle("bad-txt",own>cash);
-  h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ خود \"مالک نے رقم ڈالی\" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔"
+  h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ \"مالک نے رقم ڈالی\" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔"
     :own>cash?`اپنی جیب کی رقم نقد ادائیگی (${fmt(cash)}) سے زیادہ نہیں ہو سکتی۔`
     :`گلّے سے ${fmt(cash-own)} گیا · اپنی جیب سے ${fmt(own)} (یہ "مالک نے رقم ڈالی" کی آمد میں درج ہوگا)`;
   const th=$("#xTillHint");if(th&&$("#xTillSale").checked&&cash-own>0&&own<=cash)th.textContent=`${fmt(cash-own)} آج کی فروخت میں جڑ جائے گا۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔`;
@@ -989,7 +989,7 @@ function sheetExpense(dir="out",edit=null){
       </div>
     </div>
     <div class="own-box"><div class="fld"><label for="xOwn">نقد میں سے کتنا اپنی جیب سے دیا؟ (اختیاری)</label><input id="xOwn" name="own" class="num" inputmode="decimal" placeholder="0 — سب گلّے سے دیا"></div>
-      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ خود "مالک نے رقم ڈالی" کی آمد بن جائے گی تاکہ گلّے کا حساب ٹھیک رہے۔ یہ منافع میں نہیں گنی جاتی۔</p>
+      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ "مالک نے رقم ڈالی" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔</p>
       <label class="sale-toggle"><input type="checkbox" id="xTillSale" name="tillsale" ${tillSalePref()?"checked":""}> <span><b>گلّے سے دی گئی رقم آج کی فروخت میں شمار کریں</b><small id="xTillHint">گلّے میں جو پیسہ تھا وہ آج کی سیل کا تھا، اس لیے یہ رقم "فروخت" میں بھی جڑ جائے گی۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔</small></span></label></div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
