@@ -403,3 +403,5 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .exp-edit{margin-top:12px;border:1px dashed var(--line);border-radius:12px;padding:8px 12px}
 .exp-edit summary{cursor:pointer;font-weight:600;font-size:14px;color:var(--accent)}
 .exp-edit[open] summary{margin-bottom:8px}
+.stats.three > :last-child{grid-column:1/-1}
+@media (min-width:640px){.stats.three{grid-template-columns:repeat(3,minmax(0,1fr))}.stats.three > :last-child{grid-column:auto}}

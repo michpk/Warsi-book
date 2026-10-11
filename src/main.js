@@ -112,9 +112,8 @@ function vHome(){
   const cname=id=>(S.customers.find(c=>c.id===id)||{}).name||"—";
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">آج کا خلاصہ</h2><div class="spacer"></div><span class="pill">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))}</span></div>
-  <div class="stats">
+  <div class="stats three">
     <button class="card stat tile" data-go="sale"><span class="lbl">آج کی فروخت · ${today.length} اندراج</span><span class="val">${fmt(sum(today,s=>s.total))}</span></button>
-    <button class="card stat pay tile" data-go="cash"><span class="lbl">آج کی آمد (نقد)</span><span class="val">${fmt(cashToday)}</span></button>
     <button class="card stat owe tile" data-go="cash"><span class="lbl">آج کا خرچ${outToday!==expToday?` · نقد ${fmt(outToday)}`:""}</span><span class="val">${fmt(expToday)}</span></button>
     <button class="card stat tile" data-go="cash"><span class="lbl">گلّے میں کیش (ابھی)</span><span class="val">${fmt(tillNow)}</span></button>
   </div>
