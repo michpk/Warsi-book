@@ -88,7 +88,7 @@ function rasterizeText(root) {
     if (cs.textTransform === "uppercase") text = text.toUpperCase();
     const lead = /^\s/.test(text), trail = /\s$/.test(text);
     const c = document.createElement("canvas");
-    const P = Math.ceil(r.height * 0.6), W = r.width + 4;          // room for tall Urdu letters and dots
+    const P = Math.ceil(r.height * 0.6), X = Math.ceil(r.height * 0.5), W = r.width + 2 * X;   // room for tall letters, dots and overhang
     c.width = Math.ceil(W * SCALE); c.height = Math.ceil((r.height + 2 * P) * SCALE);
     const g = c.getContext("2d"); g.scale(SCALE, SCALE);
     g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
@@ -98,10 +98,13 @@ function rasterizeText(root) {
     const asc = m.fontBoundingBoxAscent || r.height * 0.8, desc = m.fontBoundingBoxDescent || r.height * 0.2;
     const top = (r.height - asc - desc) / 2 + asc;
     // draw the text without its outer spaces, placed where the browser placed it
-    const core = text.trim(), extra = Math.max(0, r.width - g.measureText(core).width);
+    const core = text.trim(), tw = g.measureText(core).width, extra = r.width - tw;
     const startGap = extra < 1 ? 0 : lead ? (trail ? extra / 2 : extra) : 0;      // space before the text (logical start)
-    g.fillText(core, dir === "rtl" ? 2 + r.width - startGap : 2 + startGap, P + top);
-    c.style.cssText = `width:${W}px;height:${r.height + 2 * P}px;margin:${-P}px -2px;display:inline-block;vertical-align:${-((r.height - asc - desc) / 2 + desc)}px`;
+    // if this computer's canvas measures the text wider than the page did, squeeze it to fit instead of cutting letters
+    const k = tw > r.width ? r.width / tw : 1;
+    g.save(); g.translate(dir === "rtl" ? X + r.width - startGap : X + startGap, 0); g.scale(k, 1);
+    g.fillText(core, 0, P + top); g.restore();
+    c.style.cssText = `width:${W}px;height:${r.height + 2 * P}px;margin:${-P}px ${-X}px;display:inline-block;vertical-align:${-((r.height - asc - desc) / 2 + desc)}px`;
     n.replaceWith(c);
   }
 }
