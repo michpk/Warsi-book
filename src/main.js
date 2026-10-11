@@ -255,7 +255,7 @@ function rRange(){
     case "month":return [monthStart(),d0+D,"یہ مہینہ"];
     case "lmonth":{const a=new Date(now.getFullYear(),now.getMonth()-1,1).getTime();return [a,monthStart(),"پچھلا مہینہ"]}
     case "year":return [new Date(now.getFullYear(),0,1).getTime(),d0+D,"یہ سال"];
-    case "custom":{const f=S.rFrom?new Date(S.rFrom+"T00:00:00").getTime():monthStart(),t=S.rTo?new Date(S.rTo+"T00:00:00").getTime()+D:d0+D;return [f,Math.max(t,f+D),"منتخب تاریخیں"]}
+    case "custom":{if(S.rFrom&&S.rTo&&S.rTo<S.rFrom)S.rTo=S.rFrom;const f=S.rFrom?new Date(S.rFrom+"T00:00:00").getTime():monthStart(),t=S.rTo?new Date(S.rTo+"T00:00:00").getTime()+D:d0+D;return [f,Math.max(t,f+D),"منتخب تاریخیں"]}
   }
   return [monthStart(),d0+D,"یہ مہینہ"];
 }
@@ -316,9 +316,11 @@ function vReport(){
   const ago=t=>t?Math.floor((Date.now()-t)/864e5):null;
   return `<div class="sec-head"><h2 class="h">رپورٹس</h2><div class="spacer"></div><span class="pill">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))}</span></div>
   <div class="chips">${P.map(([k,l])=>`<button class="chip" data-rp="${k}" aria-pressed="${S.rp===k}">${l}</button>`).join("")}</div>
-  <div class="dl-bar"><span>${PDF_ICON} پوری رپورٹ ڈاؤن لوڈ کریں</span><button class="btn xls" data-rep="xlsx">Excel</button><button class="btn pdf" data-rep="pdf">PDF</button></div>
-  ${S.rp==="custom"?`<div class="range-row"><label for="rFrom" class="note">سے</label><input type="date" id="rFrom" value="${S.rFrom}"><label for="rTo" class="note">تک</label><input type="date" id="rTo" value="${S.rTo||todayStr()}"></div>`:""}
-  <p class="note" style="margin:0"><span class="num">${new Date(R.from).toLocaleDateString("en-GB")}</span> سے <span class="num">${new Date(R.to-1).toLocaleDateString("en-GB")}</span> تک</p>
+  <div class="rng-box${S.rp==="custom"?" on":""}" id="rngBox"><b class="rng-t">رپورٹ کی تاریخیں</b>
+    <label class="rng-f"><span>سے</span><input type="date" id="rFrom" dir="ltr" value="${ymd(R.from)}" max="${todayStr()}"></label>
+    <label class="rng-f"><span>تک</span><input type="date" id="rTo" dir="ltr" value="${ymd(R.to-1)}" max="${todayStr()}"></label>
+    <p class="note" style="margin:0;flex-basis:100%">اوپر سے کوئی عرصہ چنیں یا یہاں اپنی مرضی کی تاریخیں ڈالیں۔ نیچے کی ساری رپورٹ اور ہر ڈاؤن لوڈ (Excel / PDF) انہی تاریخوں کا بنے گا۔</p></div>
+  <div class="dl-bar"><span>${PDF_ICON} <span class="num">${new Date(R.from).toLocaleDateString("en-GB")}</span> سے <span class="num">${new Date(R.to-1).toLocaleDateString("en-GB")}</span> تک کی پوری رپورٹ</span><button class="btn xls" data-rep="xlsx">Excel</button><button class="btn pdf" data-rep="pdf">PDF</button></div>
   <div class="stats">
     <div class="card stat"><span class="lbl">کل فروخت · ${R.sales.length} بل</span><span class="val">${fmt(R.saleT)}</span></div>
     <div class="card stat"><span class="lbl">مجموعی منافع</span><span class="val">${fmt(R.gross)}</span></div>
@@ -396,12 +398,13 @@ function reportSections(R){
     _meta:{rng,branch:S.branch==="all"?"تمام برانچیں":branchName(S.branch)}
   };
 }
+const rngName=R=>{const a=ymd(R.from),b=ymd(R.to-1);return a===b?a:a+"_to_"+b};
 function reportSheets(R){const x=reportSections(R),m=x._meta;const sum=x.summary;
   return [{...sum,rows:[[shopTitle()+" — رپورٹ"],[R.label+" ("+m.rng+")"],[m.branch],[],...sum.rows]},x.daily,x.bills,x.pl,x.cash,...(S.branches.length>1?[x.branches]:[]),x.items,x.custs,x.exp,x.recv,x.pay,x.stock]}
 const secTbl=(x,max=200)=>`<table class="pd-tbl"><thead><tr>${x.rows[0].map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${x.rows.slice(1,max+1).map(r=>`<tr>${r.map(v=>`<td>${typeof v==="number"?fq(v):esc(v)}</td>`).join("")}</tr>`).join("")||`<tr><td colspan="${x.rows[0].length}">—</td></tr>`}</tbody></table>${x.rows.length-1>max?`<p class="pd-note">پہلی ${max} قطاریں۔ پوری فہرست Excel میں ہے۔</p>`:""}`;
 async function sectionFile(R,key,kind){
   const all=reportSections(R),x=all[key],m=all._meta,sub=(x.live?"آج تک":R.label+" · "+m.rng)+" · "+m.branch;
-  const fname=x.file+"-"+todayStr();
+  const fname=x.file+"-"+(x.live?todayStr():rngName(R));
   if(kind==="xlsx")return sheetsToXlsx([{...x,rows:[[shopTitle()+" — "+x.name],[sub],[],...x.rows]}],fname+".xlsx");
   return htmlToPdf(`${pdfHead(esc(x.name),esc(sub))}${secTbl(x)}`,fname+".pdf");
 }
@@ -412,7 +415,7 @@ async function reportPdf(R){
   const html=`${pdfHead("رپورٹ · "+esc(R.label),sh[0].rows[1][0].replace(R.label,"").trim()+" · "+esc(sh[0].rows[2][0]))}
     <div class="pd-grid">${sum.map(([k,v])=>`<div><span>${esc(k)}</span><b>${typeof v==="number"?fmt(v):esc(v)}</b></div>`).join("")}</div>
     ${sh.slice(1).map(x=>tbl(x)).join("")}`;
-  return await htmlToPdf(html,"report-"+todayStr()+".pdf");
+  return await htmlToPdf(html,"report-"+rngName(R)+".pdf");
 }
 async function exportCsv(kind){
   const R=reportData(),b=S.branch,tag=todayStr();let rows,name;
@@ -1185,7 +1188,7 @@ document.addEventListener("click",async ev=>{
   if(ds.purprint){const x=S.purchases.find(v=>v.id===ds.purprint);if(x)busy(t,()=>billPdf(x,true,true));return}
   if(ds.ledprint){const x=S.customers.find(v=>v.id===ds.ledprint);if(x)busy(t,()=>ledgerPdf(x,true));return}
   if(ds.sec){const [k,kind]=ds.sec.split(":");busy(t,()=>sectionFile(S.lastReport||reportData(),k,kind));return}
-  if(ds.rep){const R=S.lastReport||reportData();busy(t,()=>ds.rep==="xlsx"?sheetsToXlsx(reportSheets(R),"report-"+todayStr()+".xlsx"):reportPdf(R));return}
+  if(ds.rep){const R=S.lastReport||reportData();busy(t,()=>ds.rep==="xlsx"?sheetsToXlsx(reportSheets(R),"report-"+rngName(R)+".xlsx"):reportPdf(R));return}
   if(ds.entvBtn){sheetEntryView(ds.entvBtn);return}
   if(ds.rmphoto!==undefined){S.photos.splice(+ds.rmphoto,1);const row=$("#photoRow");if(row)row.innerHTML=photoThumbs();return}
   if(ds.saveatt){const d=ATT[ds.saveatt];if(d)try{await saveImage("bill-"+ds.saveatt.slice(0,6)+".jpg",d.data)}catch(e){toast("تصویر محفوظ نہیں ہو سکی")}return}
@@ -1200,7 +1203,7 @@ document.addEventListener("click",async ev=>{
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]);return}
   if(ds.sms){const x=WA[ds.sms];if(x)openSMS(x[0],x[1]);return}
-  if(ds.rp){S.rp=ds.rp;render();return}
+  if(ds.rp){if(ds.rp==="custom"&&S.rp!=="custom"){const R0=rRange();S.rFrom=ymd(R0[0]);S.rTo=ymd(R0[1]-1)}S.rp=ds.rp;render();if(ds.rp==="custom")setTimeout(()=>{const i=$("#rFrom");if(i){i.scrollIntoView({block:"center"});i.focus()}},50);return}
   if(ds.csv){exportCsv(ds.csv);return}
   if(ds.purv){sheetPurchase(ds.purv);return}
   if(ds.prm){S.pcart.splice(+ds.prm,1);render();return}
@@ -1293,8 +1296,7 @@ document.addEventListener("change",e=>{
   if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
   if(t.id==="pLedger"){S.pLedger=t.checked;updPTotal()}
   if(t.id==="cashDate"){S.cashDate=t.value;render()}
-  if(t.id==="rFrom"){S.rFrom=t.value;render()}
-  if(t.id==="rTo"){S.rTo=t.value;render()}
+  if(t.id==="rFrom"||t.id==="rTo"){const f=$("#rFrom").value,to=$("#rTo").value;S.rp="custom";S.rFrom=f;S.rTo=to&&f&&to<f?f:to;render()}
   if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else{const z=itemSizes(it);S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*z.per*100)/100,unit:it.buyUnit||it.unit,per:z.per,sunit:it.unit,buySize:z.buySize,saleSize:z.saleSize,varBuy:!!it.varBuy,origBuySize:z.buySize})}render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
   if((t.id==="camIn"||t.id==="galIn")&&t.files&&t.files.length){addPhotos([...t.files]);t.value=""}
   if((t.id==="ledCam"||t.id==="ledGal")&&t.files&&t.files[0]){ledgerPhoto(t.dataset.ent,t.files[0]);t.value=""}
