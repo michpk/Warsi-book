@@ -57,7 +57,10 @@ function dateEditHtml(col,x){
   if(!S.isAdmin)return "";
   return `<form class="f date-edit" data-form="redate" data-col="${col}" data-id="${esc(x.id)}"><label for="rdDate" class="lbl-sm">تاریخ بدلیں</label>${dateField("rdDate","date",ymd(x.date))}<div class="actions"><button class="btn sm primary">نئی تاریخ محفوظ کریں</button></div></form>`;
 }
-const sumA=a=>a.reduce((x,y)=>x+(Number(y.amt)||0),0);
+const sumA=a=>a.reduce((x,y)=>x+(y.noTill?0:Number(y.amt)||0),0);
+/* money the owner put in by hand is earlier sales money he had taken home, so it is not added to the till again
+   (the "own pocket" part of an expense still is, because it balances that expense) */
+const OWNER_IN="مالک نے رقم ڈالی";
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
@@ -65,7 +68,7 @@ function cashFlow(from,to){
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in")inR.push({...r,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")});else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!x.ownFor&&expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
@@ -231,7 +234,7 @@ function vCash(){
   const d=S.cashDate||todayStr(),from=new Date(d+"T00:00:00").getTime(),to=from+864e5;
   const prev=cashFlow(0,from),open=sumA(prev.inR)-sumA(prev.out);
   const {inR,out}=cashFlow(from,to),tin=sumA(inR),tout=sumA(out);
-  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
+  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}${r.noTill?" no-till":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
   <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" dir="ltr" value="${d}" max="${todayStr()}"></label>
@@ -248,7 +251,7 @@ function vCash(){
     <section class="card"><div class="card-h"><h3>ادائیگی و خرچ</h3><span class="pill owe num">${fmt(tout)}</span></div>
       ${out.length?`<div class="led" style="border:0;border-radius:0">${rowsOf(out,"c-owe")}</div>`:`<div class="empty">اس دن کوئی ادائیگی یا خرچہ نہیں۔ بجلی، کرایہ، تنخواہ جیسے خرچے "+ خرچہ" سے لکھیں۔</div>`}</section>
   </div>
-  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری، اور ہاتھ سے لکھی آمد اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔</p>`;
+  <p class="note">روزنامچہ خود بنتا ہے: فروخت کی نقد رقم، گاہکوں سے وصولی، سپلائر کو ادائیگی، نقد خریداری، اور ہاتھ سے لکھی آمد اور خرچے۔ "پچھلا کیش" شروع سے اب تک کا حساب ہے۔ ہاتھ سے لکھی "مالک نے رقم ڈالی" گلّے کے کیش میں نہیں جوڑی جاتی، کیونکہ یہ پہلے کی سیل کی ہی رقم ہوتی ہے۔</p>`;
 }
 /* ---------- reports ---------- */
 function rRange(){
