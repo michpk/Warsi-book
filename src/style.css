@@ -399,3 +399,4 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .send-n svg{flex:none;margin-top:3px}
 .cust-tools{display:flex;gap:8px;justify-content:flex-end;margin:-4px 0 10px}
 @media (max-width:380px){.send-row .btn{min-width:0}}
+.supp-sel{width:100%;margin-bottom:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:10px;padding:10px 12px;font:inherit;font-size:15px}

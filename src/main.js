@@ -963,7 +963,11 @@ function sheetExpense(dir="out"){
     ${inc?`<label class="sale-toggle"><input type="checkbox" id="xSale" name="sale"> <span><b>اسے فروخت میں شمار کریں</b><small>ٹک کریں تو یہ رقم آج کی فروخت، روزانہ فروخت اور رپورٹس میں "فروخت" میں جڑے گی۔ ٹک نہ کریں تو صرف آمد رہے گی۔</small></span></label>`:""}
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     ${inc?"":`<div class="supp-box">
-      <div class="fld"><label for="xSupp">سپلائر / دکاندار (اختیاری)</label><input id="xSupp" name="supp" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="نام لکھیں، پرانا سپلائر نیچے سے چنیں"><div class="sugg" id="xSuppSug" hidden></div></div>
+      <div class="fld"><label for="xSuppSel">سپلائر / دکاندار (اختیاری)</label>
+        ${(()=>{const sups=S.customers.filter(c=>c.kind==="supplier"),bal=balances(),last={};for(const e of S.entries)last[e.cust]=Math.max(last[e.cust]||0,e.date);
+          sups.sort((a,b)=>(last[b.id]||0)-(last[a.id]||0)||(a.name||"").localeCompare(b.name||""));
+          return sups.length?`<select id="xSuppSel" class="supp-sel"><option value="">محفوظ سپلائر چنیں (${sups.length}) ▾</option>${sups.map(c=>{const v=bal[c.id]||0;return `<option value="${esc(c.name)}">${esc(c.name)}${v<0?" — دینے ہیں "+fmt(-v):""}</option>`}).join("")}</select>`:""})()}
+        <input id="xSupp" name="supp" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="${S.customers.some(c=>c.kind==="supplier")?"یا نیا نام لکھیں":"سپلائر کا نام لکھیں"}"><div class="sugg" id="xSuppSug" hidden></div></div>
       <div id="xSuppMore" hidden>
         <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xLedger" name="ledger" checked> یہ خرچہ اس سپلائر کے کھاتے میں بھی درج کریں</label>
         <div id="xLedOpts">
@@ -1288,7 +1292,7 @@ document.addEventListener("input",e=>{
   if(t.id==="xCat")syncCat();
   if(t.dataset.calc!==undefined)calcShow(t.id);
   if(["xSupp","xAmt","xPaid"].includes(t.id))syncExpSupp();
-  if(t.id==="xSupp")suggSupp();
+  if(t.id==="xSupp"){suggSupp();const sel=$("#xSuppSel");if(sel)sel.value=[...sel.options].some(o=>o.value&&o.value===t.value.trim())?t.value.trim():""}
   if(t.id==="xOwn")syncOwn();
   if(t.dataset.bf){const [i,f]=t.dataset.bf.split(":");if(S.bulk&&S.bulk[+i])S.bulk[+i][f]=f==="balance"?t.value:t.value}
   if(t.id==="iSaleSize")t.dataset.touched="1";
@@ -1302,6 +1306,7 @@ document.addEventListener("change",e=>{
   if(t.id==="updCost")S.updCost=t.checked;
   if(t.id==="catMore"&&t.value){const inp=$("#xCat");inp.value=t.value;syncCat()}
   if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
+  if(t.id==="xSuppSel"){const i=$("#xSupp");if(i){i.value=t.value;$("#xSuppSug").hidden=true;syncExpSupp()}}
   if(t.id==="xTillSale")syncOwn();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
