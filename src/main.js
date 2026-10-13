@@ -91,6 +91,8 @@ function render(){
   renderTabs();renderBranchSel();
   const m=$("#main");
   m.innerHTML=({home:vHome,khata:vKhata,sale:vBill,cash:vCash,report:vReport,stock:vStock,branch:vBranch}[S.tab]||vHome)();
+  const switched=S._shownTab!==S.tab;S._shownTab=S.tab;
+  if(switched){if(S.tab==="home")playHome(m);else{m.classList.remove("enter","fade");void m.offsetWidth;m.classList.add("fade")}}
   fillNames();
   if(S.tab==="sale"){if(S.billMode==="purchase")updPTotal();else updTotal()}
   if(S.after)S.after();
@@ -102,41 +104,73 @@ function readOnlyBanner(){return S.canWrite?"":`<div class="banner">آپ کے پ
 function vHome(){
   const bal=balances(),custs=S.customers.filter(inBranch);
   let recv=0,payb=0;for(const c of custs){const v=bal[c.id]||0;if(v>0)recv+=v;else payb-=v}
-  const t0=dayStart(),m0=monthStart();
+  const t0=dayStart(),m0=monthStart(),D=864e5;
   const sales=allSales().filter(inBranch);
   const today=sales.filter(s=>s.date>=t0),month=sales.filter(s=>s.date>=m0);
   const sum=(a,f)=>a.reduce((x,y)=>x+(Number(f(y))||0),0);
-  const cf=cashFlow(t0,t0+864e5),cashToday=sumA(cf.inR),outToday=sumA(cf.out);
+  const cf=cashFlow(t0,t0+D),cashToday=sumA(cf.inR),outToday=sumA(cf.out);
   const prevCf=cashFlow(0,t0),tillNow=sumA(prevCf.inR)-sumA(prevCf.out)+cashToday-outToday;
-  const expToday=sum(S.expenses.filter(x=>inBranch(x)&&x.dir!=="in"&&x.date>=t0&&x.date<t0+864e5),x=>x.amount);
+  const expToday=sum(S.expenses.filter(x=>inBranch(x)&&x.dir!=="in"&&x.date>=t0&&x.date<t0+D),x=>x.amount);
   const profit=sum(month,s=>sum(s.lines||[],l=>(l.price-(l.cost||0))*l.qty));
   const low=S.items.filter(it=>{const q=stockOf(it,S.branch);return (Number(it.min)||0)>0&&q<=Number(it.min)}).slice(0,8);
   const recent=[...S.entries].filter(inBranch).sort((a,b)=>b.date-a.date).slice(0,8);
   const cname=id=>(S.customers.find(c=>c.id===id)||{}).name||"—";
+  const saleT=sum(today,s=>s.total),cashT=sum(today,s=>s.paid),credT=Math.max(0,saleT-cashT);
+  // last 7 days of sales, oldest first
+  const days=[...Array(7)].map((_,k)=>{const a=t0-(6-k)*D;return {a,v:sum(sales.filter(s=>s.date>=a&&s.date<a+D),s=>s.total),d:new Date(a)}});
+  const top=Math.max(1,...days.map(d=>d.v)),week=sum(days,d=>d.v);
+  const WD=["اتوار","پیر","منگل","بدھ","جمعرات","جمعہ","ہفتہ"];
+  const hour=new Date().getHours(),greet=hour<12?"صبح بخیر":hour<17?"دوپہر بخیر":"شام بخیر";
+  const share=recv+payb>0?Math.round(recv/(recv+payb)*100):50;
+  const cnt=v=>`<span class="num" data-count="${Math.round(v)}">${fmt(v)}</span>`;
   return `${readOnlyBanner()}
-  <div class="sec-head"><h2 class="h">آج کا خلاصہ</h2><div class="spacer"></div><span class="pill">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))}</span></div>
-  <div class="stats three">
-    <button class="card stat tile" data-go="sale"><span class="lbl">آج کی فروخت · ${today.length} اندراج</span><span class="val">${fmt(sum(today,s=>s.total))}</span></button>
-    <button class="card stat owe tile" data-go="cash"><span class="lbl">آج کا خرچ${outToday!==expToday?` · نقد ${fmt(outToday)}`:""}</span><span class="val">${fmt(expToday)}</span></button>
-    <button class="card stat tile" data-go="cash"><span class="lbl">گلّے میں کیش (ابھی)</span><span class="val">${fmt(tillNow)}</span></button>
-  </div>
-  <div class="stats">
-    <button class="card stat owe tile" data-go="khata"><span class="lbl">کل لینے ہیں (گاہکوں سے)</span><span class="val">${fmt(recv)}</span></button>
-    <button class="card stat pay tile" data-go="khata"><span class="lbl">کل دینے ہیں</span><span class="val">${fmt(payb)}</span></button>
-    <div class="card stat"><span class="lbl">اس ماہ فروخت</span><span class="val">${fmt(sum(month,s=>s.total))}</span></div>
-    <div class="card stat"><span class="lbl">اس ماہ اندازاً منافع</span><span class="val">${fmt(profit)}</span></div>
-  </div>
-  ${S.canWrite?`<div class="chips"><button class="btn primary" data-go="sale">+ نیا بل</button><button class="btn" data-act="newCust">+ نیا گاہک</button><button class="btn" data-act="newItem">+ نئی چیز</button></div>`:""}
+  <section class="dash-hero">
+    <div class="dh-top"><div><div class="dh-greet">${greet}${me.name?"، "+esc(String(me.name).split(" ")[0]):""}</div><div class="dh-sub">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))} · آج کی فروخت</div></div>
+      ${S.canWrite?`<button class="dh-new" data-go="sale">+ نیا بل</button>`:""}</div>
+    <div class="dh-main">
+      <button class="dh-sale" data-go="sale"><span class="dh-big">${cnt(saleT)}</span>
+        <span class="dh-split"><span><i class="dot cash"></i>نقد ${fmt(cashT)}</span><span><i class="dot cred"></i>ادھار ${fmt(credT)}</span><span>${today.length} بل</span></span></button>
+      <div class="dh-week" role="img" aria-label="پچھلے سات دن کی فروخت: ${fmt(week)}">
+        ${days.map((d,k)=>`<div class="wk${k===6?" today":""}" title="${WD[d.d.getDay()]}: ${fmt(d.v)}"><span class="wk-bar" style="--h:${Math.max(3,Math.round(d.v/top*100))}%;--i:${k}"></span><span class="wk-d">${k===6?"آج":WD[d.d.getDay()]}</span></div>`).join("")}
+        <div class="wk-cap">سات دن: <span class="num">${fmt(week)}</span></div>
+      </div>
+    </div>
+    <div class="dh-foot">
+      <button data-go="cash"><span>آج کا خرچ</span><b class="owe-t">${cnt(expToday)}</b></button>
+      <button data-go="cash"><span>گلّے میں کیش</span><b>${cnt(tillNow)}</b></button>
+      <button data-go="report"><span>اس ماہ منافع</span><b>${cnt(profit)}</b></button>
+    </div>
+  </section>
+  ${S.canWrite?`<div class="quick">
+    <button data-go="sale"><span class="q-ic">${ICON.sale}</span>نیا بل</button>
+    <button data-act="newInc"><span class="q-ic in">＋</span>آمد</button>
+    <button data-act="newExp"><span class="q-ic out">－</span>خرچہ</button>
+    <button data-act="newCust"><span class="q-ic">${ICON.khata}</span>نیا گاہک</button>
+  </div>`:""}
+  <button class="card dues" data-go="khata">
+    <div class="dues-h"><span><small>گاہکوں سے لینے ہیں</small><b class="c-owe">${cnt(recv)}</b></span><span class="dues-mid">اس ماہ فروخت <b class="num">${fmt(sum(month,s=>s.total))}</b></span><span class="end"><small>سپلائرز کو دینے ہیں</small><b class="c-pay">${cnt(payb)}</b></span></div>
+    <div class="dues-bar"><i class="r" style="--w:${share}%"></i><i class="g" style="--w:${100-share}%"></i></div>
+  </button>
   <div class="grid2">
     <section class="card"><div class="card-h"><h3>کم اسٹاک</h3><span class="pill warn">${low.length}</span></div>
-      ${low.length?`<div class="list">${low.map(it=>`<button class="row" data-item="${esc(it.id)}"><div class="main"><div class="t">${esc(it.name)}</div><div class="s">کم از کم ${fq(it.min)} ${esc(it.unit||"")}</div></div><span class="pill warn num">${fq(stockOf(it,S.branch))} ${esc(it.unit||"")}</span></button>`).join("")}</div>`
-      :`<div class="empty">جن چیزوں کا اسٹاک "کم از کم" حد سے نیچے جائے گا، وہ یہاں نظر آئیں گی۔</div>`}
+      ${low.length?`<div class="list">${low.map(it=>{const q=stockOf(it,S.branch),mn=Number(it.min)||1;return `<button class="row" data-item="${esc(it.id)}"><div class="main"><div class="t">${esc(it.name)}</div><div class="lowbar"><i style="--w:${Math.min(100,Math.max(4,Math.round(q/mn*100)))}%"></i></div><div class="s">کم از کم ${fq(it.min)} ${esc(it.unit||"")}</div></div><span class="pill warn num">${fq(q)} ${esc(it.unit||"")}</span></button>`}).join("")}</div>`
+      :`<div class="empty">سب چیزوں کا اسٹاک ٹھیک ہے۔ جس چیز کا اسٹاک "کم از کم" سے نیچے جائے گا، وہ یہاں آئے گی۔</div>`}
     </section>
-    <section class="card"><div class="card-h"><h3>تازہ اندراجات</h3></div>
-      ${recent.length?`<div class="list">${recent.map(e=>`<button class="row" data-cust="${esc(e.cust)}"><div class="main"><div class="t">${esc(cname(e.cust))}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||(e.type==="gave"?"ادھار دیا":"رقم ملی"))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div><div class="k c-muted">${e.type==="gave"?"دیے":"ملے"}</div></div></button>`).join("")}</div>`
+    <section class="card"><div class="card-h"><h3>تازہ اندراجات</h3><button class="btn ghost sm" data-go="khata">سب کھاتے</button></div>
+      ${recent.length?`<div class="list">${recent.map(e=>`<button class="row" data-cust="${esc(e.cust)}"><div class="av ${e.type==="gave"?"owe":"pay"}">${esc((cname(e.cust)||"?").trim()[0]||"?")}</div><div class="main"><div class="t">${esc(cname(e.cust))}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||(e.type==="gave"?"ادھار دیا":"رقم ملی"))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div><div class="k c-muted">${e.type==="gave"?"دیے":"ملے"}</div></div></button>`).join("")}</div>`
       :`<div class="empty">ابھی کوئی لین دین درج نہیں ہوا۔ "کھاتے" میں گاہک بنا کر پہلا اندراج کریں۔</div>`}
     </section>
   </div>`;
+}
+/* the one entrance moment: numbers count up and the week's bars rise when the dashboard is opened */
+function playHome(m){
+  if(!m||(window.matchMedia&&matchMedia("(prefers-reduced-motion: reduce)").matches))return;
+  m.classList.remove("enter","fade");void m.offsetWidth;m.classList.add("enter");
+  const els=[...m.querySelectorAll("[data-count]")],t0=performance.now(),dur=900;
+  const step=t=>{const k=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-k,3);
+    for(const el of els){const v=+el.dataset.count;el.textContent=fmt(v*e)}
+    if(k<1)requestAnimationFrame(step)};
+  requestAnimationFrame(step);
 }
 
 function vKhata(){
