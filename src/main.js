@@ -1,5 +1,6 @@
 import "./style.css";
 import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
+import { initBarcode, scanBtn, itemCodesHtml, collectCodes, codesOf, findCode, sheetCount, sheetLabels, SCAN_ICON } from "./barcode.js";
 import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts } from "./pay.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
@@ -219,7 +220,7 @@ function vSale(){
   return `<div class="sec-head"><h2 class="h">نیا بل</h2><div class="spacer"></div><span class="pill">${esc(branchName(bid))}${S.branch==="all"?" (پہلی برانچ)":""}</span></div>
   <section class="card pad" style="display:flex;flex-direction:column;gap:12px">
     <div class="fld"><label for="itemPick">چیز شامل کریں</label>
-      <input id="itemPick" list="itemList" placeholder="نام لکھیں یا چنیں" autocomplete="off">
+      <div class="pick-row"><input id="itemPick" list="itemList" placeholder="نام لکھیں، چنیں یا بارکوڈ اسکین کریں" autocomplete="off">${scanBtn()}</div>
       <datalist id="itemList">${S.items.map(it=>`<option value="${esc(it.name)}">${fq(stockOf(it,bid))} ${esc(it.unit||"")} · Rs ${fq(it.sale)}</option>`).join("")}</datalist>
     </div>
     ${S.cart.length?`<div>${S.cart.map((l,i)=>`<div class="cart-line"><div style="min-width:0"><div class="t" style="font-weight:600">${esc(l.name)}</div><div class="note">موجود: <span class="num">${fq(stockOf(S.items.find(x=>x.id===l.item)||{},bid))}</span> ${esc(l.unit||"")}</div></div><input id="q${i}" data-cq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input id="p${i}" data-cp="${i}" inputmode="decimal" value="${l.price}" aria-label="ریٹ"><button class="x" data-rm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")}
@@ -244,7 +245,7 @@ function vPurchase(){
   return `<div class="sec-head"><h2 class="h">خریداری کا بل</h2><div class="spacer"></div><span class="pill">${esc(branchName(bid))}${S.branch==="all"?" (پہلی برانچ)":""}</span></div>
   <section class="card pad" style="display:flex;flex-direction:column;gap:12px">
     <div class="fld"><label for="pItemPick">آنے والی چیز</label>
-      <input id="pItemPick" list="pItemList" placeholder="نام لکھیں یا چنیں" autocomplete="off">
+      <div class="pick-row"><input id="pItemPick" list="pItemList" placeholder="نام لکھیں، چنیں یا بارکوڈ اسکین کریں" autocomplete="off">${scanBtn()}</div>
       <datalist id="pItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${fq(stockOf(it,bid))} ${esc(it.unit||"")} · خرید Rs ${fq(it.cost)}</option>`).join("")}</datalist>
       <span class="note">نئی چیز ہو تو پہلے "اسٹاک" میں شامل کریں۔</span>
     </div>
@@ -488,11 +489,12 @@ function vSalesList(){
 
 function vStock(){
   const q=S.stockQ.trim().toLowerCase(),b=S.branch;
-  let list=[...S.items];if(q)list=list.filter(it=>(it.name||"").toLowerCase().includes(q)||(it.cat||"").toLowerCase().includes(q));
+  let list=[...S.items];if(q)list=list.filter(it=>(it.name||"").toLowerCase().includes(q)||(it.cat||"").toLowerCase().includes(q)||codesOf(it).some(x=>x.c===q));
   list.sort((a,b2)=>(a.name||"").localeCompare(b2.name||""));
   const value=list.reduce((a,it)=>a+stockOf(it,b)*(Number(it.cost)||0),0);
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">اسٹاک</h2><div class="spacer"></div>${S.canWrite?`<button class="btn primary" data-act="newItem">+ نئی چیز</button>`:""}</div>
+  <div class="bc-tools">${scanBtn("اسکین کر کے دیکھیں")}${S.canWrite?`<button class="btn" data-act="stockCount">${SCAN_ICON}<span>اسٹاک گنتی</span></button>`:""}<button class="btn" data-act="labels"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 5h18v14H3z"/><path d="M6 8v8M9 8v8M12 8v8M15 8v8M18 8v8"/></svg><span>بارکوڈ اسٹیکر</span></button></div>
   <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
     <div class="card stat"><span class="lbl">کل اشیاء</span><span class="val">${list.length}</span></div>
     <div class="card stat"><span class="lbl">اسٹاک کی مالیت (خرید ریٹ)</span><span class="val">${fmt(value)}</span></div>
@@ -772,6 +774,7 @@ function sheetItemForm(it,copy){
     <div class="fld"><label for="iSale" id="iSaleLbl">فروخت ریٹ (فی ${esc(unit)})</label><input id="iSale" name="sale" class="num" inputmode="decimal" required value="${esc(it.sale??"")}"></div></div>
     <div class="two"><div class="fld"><label for="iMin" id="iMinLbl">کم از کم اسٹاک (${esc(unit)})</label><input id="iMin" name="min" class="num" inputmode="decimal" value="${esc(it.min??"")}"></div>
     ${!editId?`<div class="fld"><label for="iOpen" id="iOpenLbl">موجودہ اسٹاک (${esc(unit)}، ${esc(branchName(defBranch()))})</label><input id="iOpen" name="open" class="num" inputmode="decimal" placeholder="0"></div>`:"<div></div>"}</div>
+    ${itemCodesHtml(copy?{}:it)}
     <div class="actions"><button type="button" class="btn" data-close>منسوخ</button><button class="btn primary">محفوظ کریں</button></div></form>`);
   syncItemForm();
 }
@@ -796,6 +799,7 @@ function sheetItem(id){
    ${S.branches.map(b=>`<tr><td>${esc(b.name)}</td><td class="n num">${esc(stockText(it,stockOf(it,b.id)))}</td></tr>`).join("")}
    <tr><td><strong>کل</strong></td><td class="n num"><strong>${esc(stockText(it,stockOf(it,"all")))}</strong></td></tr></tbody></table></div>
    <p class="note">فروخت ریٹ <span class="num">${fq(it.sale)}</span> فی ${esc(it.unit||"")} · خرید ریٹ <span class="num">${fq(it.buyCost??it.cost)}</span> فی ${esc(it.buyUnit||it.unit||"")} · کم از کم <span class="num">${fq(it.min)}</span></p>
+   ${codesOf(it).length?`<p class="note">بارکوڈ: ${codesOf(it).map(x=>`<span class="num">${esc(x.c)}</span>${x.n!==1?` (${fq(x.n)} ${esc(it.unit||"")})`:""}`).join("، ")}</p>`:""}
    ${it.buyUnit&&it.buyUnit!==it.unit?`<p class="conv">1 ${esc(it.buyUnit)} = ${fq(itemSizes(it).buySize)} پیس = ${fq(Math.round(itemSizes(it).per*1000)/1000)} ${esc(it.unit)}${it.varBuy?" · (ہر خریداری پر بدل سکتی ہے)":""}</p>`:""}
    ${S.canWrite?`<form class="f" data-form="move" data-id="${esc(it.id)}" style="padding:12px;border:1px solid var(--line);border-radius:var(--r)">
      <div class="two"><div class="fld"><label for="mType">کام</label><select id="mType" name="type"><option value="in">آمد (مال آیا)</option><option value="out">کمی / خراب مال</option><option value="set">گنتی درست کریں</option>${S.branches.length>1?`<option value="transfer">دوسری برانچ بھیجیں</option>`:""}</select></div>
@@ -803,7 +807,7 @@ function sheetItem(id){
      <div class="two"><div class="fld"><label for="mFrom">برانچ</label><select id="mFrom" name="from">${branchOptions(defBranch())}</select></div>
      <div class="fld"><label for="mTo">بھیجیں (صرف ٹرانسفر)</label><select id="mTo" name="to">${branchOptions(S.branches.find(b=>b.id!==defBranch())?.id)}</select></div></div>
      <div class="actions"><button class="btn primary">اسٹاک اپڈیٹ کریں</button></div></form>
-     <div class="actions" style="margin-top:10px"><button class="btn sm" data-copyitem="${esc(it.id)}">اسی جیسی نئی چیز (نیا سائز)</button><button class="btn sm" data-edititem="${esc(it.id)}">چیز میں ترمیم</button></div>`:""}`);
+     <div class="actions" style="margin-top:10px"><button class="btn sm" data-lblitem="${esc(it.id)}">بارکوڈ اسٹیکر</button><button class="btn sm" data-copyitem="${esc(it.id)}">اسی جیسی نئی چیز (نیا سائز)</button><button class="btn sm" data-edititem="${esc(it.id)}">چیز میں ترمیم</button></div>`:""}`);
 }
 function sheetBranch(b){
   b=b||{};
@@ -1134,7 +1138,7 @@ document.addEventListener("submit",async ev=>{
     const saleSize=diff?(num(d.saleSize)||1):1,buySize=diff?num(d.buySize):1;
     if(diff&&!(buySize>0)){toast("بتائیں کہ ایک "+buyUnit+" میں کتنے پیس ہیں");if(btn)btn.disabled=false;return}
     const per=buySize/saleSize;
-    const body={name:d.name.trim(),cat:d.cat.trim(),unit,buyUnit,saleSize,buySize,per,varBuy:diff&&!!d.varBuy,buyCost,cost:Math.round(buyCost/per*10000)/10000,sale:num(d.sale),min:num(d.min)};
+    const body={name:d.name.trim(),cat:d.cat.trim(),unit,buyUnit,saleSize,buySize,per,varBuy:diff&&!!d.varBuy,buyCost,cost:Math.round(buyCost/per*10000)/10000,sale:num(d.sale),min:num(d.min),codes:collectCodes()};
     if(id)ok=await w(()=>db.update("items",id,body));
     else{const b=defBranch();ok=await w(()=>db.add("items",{...body,stock:b?{[b]:num(d.open)}:{},createdAt:Date.now()}))}
     if(ok){closeSheet();toast("محفوظ ہو گیا")}
@@ -1249,6 +1253,7 @@ document.addEventListener("click",async ev=>{
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
+  if(ds.lblitem){sheetLabels([ds.lblitem]);return}
   if(ds.expedit){const x=S.expenses.find(v=>v.id===ds.expedit);if(x)sheetExpense(x.dir==="in"?"in":"out",x);return}
   if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
     let v=ds.dset?ds.d:ymd(new Date((inp.value||todayStr())+"T12:00:00").getTime()+Number(ds.k)*864e5);
@@ -1331,6 +1336,8 @@ document.addEventListener("click",async ev=>{
   if(a==="bulkSave")saveBulk(t);
   if(a==="bulkTpl"){busy(t,async()=>{const imp=await import("./importer.js");return saveBinary("khate-namoona.xlsx",await imp.templateXlsx(),"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")})}
   if(a==="newInc")sheetExpense("in");
+  if(a==="stockCount")sheetCount();
+  if(a==="labels")sheetLabels();
   if(a==="copySummary"){try{await navigator.clipboard.writeText(summaryText());toast("کاپی ہو گیا — واٹس ایپ پر پیسٹ کریں")}catch(e){toast("کاپی نہیں ہو سکا")}}
   if(a==="pickNative")pickNative();
   if(a==="showContacts")renderContactBox("");
@@ -1372,7 +1379,7 @@ document.addEventListener("input",e=>{
 });
 document.addEventListener("change",e=>{
   const t=e.target;
-  if(t.id==="itemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.cart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else S.cart.push({item:it.id,name:it.name,qty:1,price:Number(it.sale)||0,cost:Number(it.cost)||0,unit:it.unit});render();$("#itemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if(t.id==="itemPick"){const v=t.value.trim(),it=S.items.find(x=>x.name===v),bc=!it&&findCode(v);if(it||bc){addSaleLine(it||bc.it,it?1:bc.n);$("#itemPick").focus()}else if(v)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
@@ -1390,11 +1397,14 @@ document.addEventListener("change",e=>{
   if(t.id==="pLedger"){S.pLedger=t.checked;updPTotal()}
   if(t.id==="cashDate"){S.cashDate=t.value;render()}
   if(t.id==="rFrom"||t.id==="rTo"){const f=$("#rFrom").value,to=$("#rTo").value;S.rp="custom";S.rFrom=f;S.rTo=to&&f&&to<f?f:to;render()}
-  if(t.id==="pItemPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty+=1;else{const z=itemSizes(it);S.pcart.push({item:it.id,name:it.name,qty:1,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*z.per*100)/100,unit:it.buyUnit||it.unit,per:z.per,sunit:it.unit,buySize:z.buySize,saleSize:z.saleSize,varBuy:!!it.varBuy,origBuySize:z.buySize})}render();$("#pItemPick").focus()}else if(t.value)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if(t.id==="pItemPick"){const v=t.value.trim(),it=S.items.find(x=>x.name===v)||(findCode(v)||{}).it;if(it){addPurchLine(it,1);$("#pItemPick").focus()}else if(v)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
   if((t.id==="camIn"||t.id==="galIn")&&t.files&&t.files.length){addPhotos([...t.files]);t.value=""}
   if((t.id==="ledCam"||t.id==="ledGal")&&t.files&&t.files[0]){ledgerPhoto(t.dataset.ent,t.files[0]);t.value=""}
   if(t.id==="vcfIn"&&t.files&&t.files[0]){const r=new FileReader();r.onload=()=>{const list=parseVcf(String(r.result||""));if(!list.length){toast("اس فائل میں کوئی نمبر نہیں ملا");return}S.contacts=list;renderContactBox("")};r.readAsText(t.files[0]);t.value=""}
 });
+/* add an item to the sale bill / purchase (from the list, a typed barcode or a scan) */
+function addSaleLine(it,n=1){const ex=S.cart.find(l=>l.item===it.id);if(ex)ex.qty=Math.round((ex.qty+n)*1000)/1000;else S.cart.push({item:it.id,name:it.name,qty:n,price:Number(it.sale)||0,cost:Number(it.cost)||0,unit:it.unit});if(S.tab==="sale")render()}
+function addPurchLine(it,n=1){const ex=S.pcart.find(l=>l.item===it.id);if(ex)ex.qty=Math.round((ex.qty+n)*1000)/1000;else{const z=itemSizes(it);S.pcart.push({item:it.id,name:it.name,qty:n,price:Number(it.buyCost)||Math.round((Number(it.cost)||0)*z.per*100)/100,unit:it.buyUnit||it.unit,per:z.per,sunit:it.unit,buySize:z.buySize,saleSize:z.saleSize,varBuy:!!it.varBuy,origBuySize:z.buySize})}if(S.tab==="sale")render()}
 function updTotal(){
   const total=S.cart.reduce((a,l)=>a+l.qty*l.price,0);const el=$("#cartTotal");if(el)el.textContent=fmt(total);
   const h=$("#saleHint");if(!h)return;const {mode,paid,due}=payCalc("sale",total);
@@ -1410,5 +1420,6 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden&&!document
 S.appVersion=appVersion();
 /* ---------- boot ---------- */
 initPay({S,esc,fmt,toast,openSheet,closeSheet,$,render,savePayAccounts});bindPayEvents();
+initBarcode({S,esc,fmt,fq,toast,openSheet,closeSheet,render,db,w,stockOf,itemSizes,branchName,branchOptions,defBranch,saveBinary,shopTitle,sheetItemForm,sheetItem,addSaleLine,addPurchLine});
 import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile,setPayAccounts}));
 export {S};
