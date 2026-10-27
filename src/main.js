@@ -757,10 +757,11 @@ function srcChoiceHtml(type){
   else if(!sup&&type==="got"){k="rec";opts=[["cash","نقد (گلّے میں)"],["bank","بینک / موبائل اکاؤنٹ"]]}
   if(!opts)return "";
   const cur=srcPref(k,opts[0][0]);
-  const hint={till:"یہ رقم آج کی سیل میں بھی شامل ہو جائے گی (گلّے میں سیل کا پیسہ تھا)۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"یہ رقم سیل میں شامل ہوگی، لیکن گلّے کے کیش میں نہیں جڑے گی۔",cash:"یہ رقم آج کی سیل میں شامل ہوگی اور گلّے کے کیش میں جڑے گی۔"};
+  const hint={till:"رقم گلّے سے گئی۔ نیچے بتائیں کہ اس سیل کا بل بنا تھا یا نہیں۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"یہ رقم سیل میں شامل ہوگی، لیکن گلّے کے کیش میں نہیں جڑے گی۔",cash:"یہ رقم آج کی سیل میں شامل ہوگی اور گلّے کے کیش میں جڑے گی۔"};
   return `<div class="fld"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
     <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
-    <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
+    <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p>
+    ${k==="pay"?BILLED_Q("eBilled","billed",billedPref(),cur==="till"?"":" hidden"):""}</div>`;
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -1011,7 +1012,10 @@ function suggSupp(){
   box.innerHTML=hits.map(c=>`<button type="button" data-pickss="${esc(c.name)}">${esc(c.name)}${c.phone?` <span class="note num">${esc(c.phone)}</span>`:""}</button>`).join("")+(v&&!list.some(c=>(c.name||"").toLowerCase()===v)?`<div class="sugg-new">+ "${esc((($("#xSupp")||{}).value||"").trim())}" نیا سپلائر بنے گا</div>`:"");
   box.hidden=!box.innerHTML;
 }
-function tillSalePref(){try{return localStorage.getItem("wb_tillsale")!=="0"}catch(e){return true}}
+/* "was this till sale already entered through a bill?"  — if yes, it must not be added to the sale again */
+function billedPref(){try{const v=localStorage.getItem("wb_billed");return v!=null?v==="1":localStorage.getItem("wb_tillsale")==="0"}catch(e){return false}}
+function setBilledPref(v){try{localStorage.setItem("wb_billed",v?"1":"0")}catch(e){}}
+const BILLED_Q=(id,name,checked,extra="")=>`<label class="sale-toggle billed-q"${extra}><input type="checkbox" id="${id}" name="${name}" ${checked?"checked":""}> <span><b>کیا گلّے کی یہ سیل بل کے ذریعے درج ہو چکی ہے؟</b><small id="${id}Hint">ٹک کریں اگر اس رقم کی سیل کا بل بنا تھا، تب یہ دوبارہ سیل میں نہیں جڑے گی۔ ٹک نہ کریں تو یہ رقم آج کی سیل میں شامل ہو جائے گی۔</small></span></label>`;
 function syncOwn(){
   const h=$("#xOwnHint");if(!h)return;const own=num(($("#xOwn")||{}).value);
   const amt=calcEval(($("#xAmt")||{}).value)||0,v=(($("#xSupp")||{}).value||"").trim(),led=v&&($("#xLedger")||{}).checked;
@@ -1020,7 +1024,7 @@ function syncOwn(){
   h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ \"مالک نے رقم ڈالی\" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔"
     :own>cash?`اپنی جیب کی رقم نقد ادائیگی (${fmt(cash)}) سے زیادہ نہیں ہو سکتی۔`
     :`گلّے سے ${fmt(cash-own)} گیا · اپنی جیب سے ${fmt(own)} (یہ "مالک نے رقم ڈالی" کی آمد میں درج ہوگا)`;
-  const th=$("#xTillHint");if(th&&$("#xTillSale").checked&&cash-own>0&&own<=cash)th.textContent=`${fmt(cash-own)} آج کی فروخت میں جڑ جائے گا۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔`;
+  const th=$("#xBilledHint");if(th&&cash-own>0&&own<=cash)th.textContent=$("#xBilled").checked?`گلّے سے گئے ${fmt(cash-own)} سیل میں دوبارہ نہیں جڑیں گے (بل میں گنے جا چکے)۔`:`گلّے سے گئے ${fmt(cash-own)} آج کی سیل میں شامل ہو جائیں گے، کیونکہ اس سیل کا بل نہیں بنا۔`;
 }
 function syncExpSupp(){
   const v=(($("#xSupp")||{}).value||"").trim(),more=$("#xSuppMore");if(!more)return;more.hidden=!v;
@@ -1062,7 +1066,7 @@ function sheetExpense(dir="out",edit=null){
     </div>
     <div class="own-box"><div class="fld"><label for="xOwn">نقد میں سے کتنا اپنی جیب سے دیا؟ (اختیاری)</label><input id="xOwn" name="own" class="num" inputmode="decimal" placeholder="0 — سب گلّے سے دیا"></div>
       <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ "مالک نے رقم ڈالی" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔</p>
-      <label class="sale-toggle"><input type="checkbox" id="xTillSale" name="tillsale" ${tillSalePref()?"checked":""}> <span><b>گلّے سے دی گئی رقم آج کی فروخت میں شمار کریں</b><small id="xTillHint">گلّے میں جو پیسہ تھا وہ آج کی سیل کا تھا، اس لیے یہ رقم "فروخت" میں بھی جڑ جائے گی۔ اگر آپ ہر سیل کا بل الگ سے بناتے ہیں تو ٹک ہٹا دیں، ورنہ فروخت دو بار گنی جائے گی۔</small></span></label></div>`}
+      ${BILLED_Q("xBilled","billed",billedPref())}</div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
@@ -1084,7 +1088,7 @@ function fillExpense(x){
       const paid=x.paid!=null?Number(x.paid):Number(x.amount);S.xMode=paid>=x.amount?"cash":paid<=0?"credit":"part";
       if(S.xMode==="part")set("xPaid",String(paid));syncExpSupp();}
     set("xOwn",x.own?String(x.own):"");
-    chk("xTillSale",x.tillSale>0||(!(x.tillSale>0)&&Math.max(0,(x.paid!=null?x.paid:x.amount)-(x.own||0))===0&&tillSalePref()));
+    chk("xBilled",!(x.tillSale>0)&&(Math.max(0,(x.paid!=null?x.paid:x.amount)-(x.own||0))>0||billedPref()));
   }
   const n=document.querySelector('form[data-form="expense"] .note:last-of-type');
   const box=document.createElement("p");box.className="note edit-note";box.textContent="محفوظ کرنے پر پرانا اندراج اس نئی معلومات سے بدل جائے گا۔ سپلائر کے کھاتے، اپنی جیب اور گلّے والے اندراجات بھی ساتھ ٹھیک ہو جائیں گے۔ پرانی تصویریں ساتھ رہیں گی۔";
@@ -1167,7 +1171,8 @@ document.addEventListener("submit",async ev=>{
     const src=d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
     const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...(src?{src}:{}),...by()}}];
     const nm=(c&&c.name)||"";
-    if(src==="till")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
+    if(src==="till")setBilledPref(!!d.billed);
+    if(src==="till"&&!d.billed)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
@@ -1217,8 +1222,8 @@ document.addEventListener("submit",async ev=>{
     if(own>paid){toast("اپنی جیب کی رقم نقد ادائیگی سے زیادہ نہیں ہو سکتی");if(btn)btn.disabled=false;return}
     if(own>0)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:own,dir:"in",pl:false,sale:false,att:[],note:"مالک نے رقم ڈالی · "+cat+(sname?" ("+sname+")":"")+" کے لیے",date:dt-1,branch:d.branch||"",ownFor:xid,...by()}});
     if(own>0)ops.find(o=>o.id===xid).data.own=own;
-    const till=dir==="out"&&d.tillsale?Math.max(0,paid-own):0;
-    try{if(dir==="out")localStorage.setItem("wb_tillsale",d.tillsale?"1":"0")}catch(e){}
+    const till=dir==="out"&&!d.billed?Math.max(0,paid-own):0;
+    if(dir==="out")setBilledPref(!!d.billed);
     if(till>0){ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:till,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · "+cat+(sname?" ("+sname+")":"")+" کو ادا کی",date:dt-2,branch:d.branch||"",saleFor:xid,...by()}});ops.find(o=>o.id===xid).data.tillSale=till}
     ok=await w(()=>db.batch(ops));
     if(ok){closeSheet();toast(old?"تبدیلی محفوظ":dir==="in"?"آمد محفوظ":own>0?"خرچہ اور اپنی جیب کی رقم محفوظ":"خرچہ محفوظ")}
@@ -1293,7 +1298,7 @@ document.addEventListener("click",async ev=>{
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
-  if(ds.src){const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
+  if(ds.src){const bq=document.querySelector("#eSrcSeg ~ .billed-q");if(bq)bq.hidden=ds.src!=="till";const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
   if(ds.expedit){const x=S.expenses.find(v=>v.id===ds.expedit);if(x)sheetExpense(x.dir==="in"?"in":"out",x);return}
   if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
@@ -1427,7 +1432,7 @@ document.addEventListener("change",e=>{
   if(t.id==="catMore"&&t.value){const inp=$("#xCat");inp.value=t.value;syncCat()}
   if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
   if(t.id==="xSuppSel"){const i=$("#xSupp");if(i){i.value=t.value;$("#xSuppSug").hidden=true;syncExpSupp()}}
-  if(t.id==="xTillSale")syncOwn();
+  if(t.id==="xBilled")syncOwn();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
