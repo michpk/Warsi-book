@@ -50,6 +50,7 @@ function dateField(id,name,value){
 const withDate=(t,dstr)=>{const o=new Date(t),n=new Date(dstr+"T00:00:00");n.setHours(o.getHours(),o.getMinutes(),o.getSeconds(),o.getMilliseconds());return n.getTime()};
 /* "edit" opens the same window used to enter the record, filled in */
 function expEditHtml(x){
+  if(x.payFor)return `<p class="note" style="margin-top:12px">یہ رقم ${S.customers.find(c=>c.id===(S.entries.find(e=>e.id===x.payFor)||{}).cust)?.name?`"${esc(S.customers.find(c=>c.id===(S.entries.find(e=>e.id===x.payFor)||{}).cust).name)}" کو `:""}ادائیگی کے ساتھ خود بنی ہے۔ بدلنا ہو تو کھاتے سے وہ ادائیگی حذف کر کے دوبارہ درج کریں۔</p>`;
   if(!S.isAdmin)return "";
   const parent=x.ownFor||x.saleFor,target=parent&&S.expenses.some(e=>e.id===parent)?parent:x.id;
   return `<div class="actions" style="margin-top:12px"><button type="button" class="btn primary" data-expedit="${esc(target)}">✎ ترمیم کریں</button></div>`;
@@ -65,15 +66,26 @@ const OWNER_IN="مالک نے رقم ڈالی";
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
-  for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp)continue;const c=ck(e.cust),sup=c.kind==="supplier";
+  for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp||e.src==="bank")continue;const c=ck(e.cust),sup=c.kind==="supplier";
     if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
-    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.note?" · "+e.note:"")});}
+    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
   for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
 const allSales=()=>S.sales.concat(S.expenses.filter(x=>x.dir==="in"&&x.sale).map(x=>({id:x.id,no:"دستی",date:x.date,branch:x.branch,custName:expCat(x),total:Number(x.amount)||0,paid:Number(x.amount)||0,lines:[],manual:true})));
+/* "روزانہ سیل" = money that actually came in from selling: the cash part of bills, what customers paid
+   against their credit (cash or bank), and manual / till sales. Credit given is shown but not counted. */
+function cashSales(from,to){
+  const ck=id=>S.customers.find(c=>c.id===id)||{},inR=x=>inBranch(x)&&x.date>=from&&x.date<to;
+  const rows=[];let bills=0,rec=0,man=0,credit=0,nBills=0;
+  for(const s of S.sales)if(inR(s)){nBills++;const p=Number(s.paid)||0,t=Number(s.total)||0;if(p>0){bills+=p;rows.push({date:s.date,amt:p,k:"bill"})}if(t>p)credit+=t-p}
+  for(const e of S.entries)if(inR(e)&&!e.sale&&!e.purchase&&!e.exp&&(ck(e.cust).kind||"customer")==="customer"){
+    if(e.type==="got"){rec+=Number(e.amount)||0;rows.push({date:e.date,amt:Number(e.amount)||0,k:"rec"})}else credit+=Number(e.amount)||0}
+  for(const x of S.expenses)if(inR(x)&&x.dir==="in"&&x.sale){man+=Number(x.amount)||0;rows.push({date:x.date,amt:Number(x.amount)||0,k:"man"})}
+  return {bills,rec,man,credit,nBills,total:bills+rec+man,rows};
+}
 const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s).reduce((a,v)=>a+(Number(v)||0),0);return Number(s[b])||0};
 
 /* ---------- render shell ---------- */
@@ -116,9 +128,9 @@ function vHome(){
   const low=S.items.filter(it=>{const q=stockOf(it,S.branch);return (Number(it.min)||0)>0&&q<=Number(it.min)}).slice(0,8);
   const recent=[...S.entries].filter(inBranch).sort((a,b)=>b.date-a.date).slice(0,8);
   const cname=id=>(S.customers.find(c=>c.id===id)||{}).name||"—";
-  const saleT=sum(today,s=>s.total),cashT=sum(today,s=>s.paid),credT=Math.max(0,saleT-cashT);
+  const cs=cashSales(t0,t0+D),saleT=cs.total,monthSale=cashSales(m0,t0+D).total;
   // last 7 days of sales, oldest first
-  const days=[...Array(7)].map((_,k)=>{const a=t0-(6-k)*D;return {a,v:sum(sales.filter(s=>s.date>=a&&s.date<a+D),s=>s.total),d:new Date(a)}});
+  const days=[...Array(7)].map((_,k)=>{const a=t0-(6-k)*D;return {a,v:cashSales(a,a+D).total,d:new Date(a)}});
   const top=Math.max(1,...days.map(d=>d.v)),week=sum(days,d=>d.v);
   const WD=["اتوار","پیر","منگل","بدھ","جمعرات","جمعہ","ہفتہ"];
   const hour=new Date().getHours(),greet=hour<12?"صبح بخیر":hour<17?"دوپہر بخیر":"شام بخیر";
@@ -126,12 +138,12 @@ function vHome(){
   const cnt=v=>`<span class="num" data-count="${Math.round(v)}">${fmt(v)}</span>`;
   return `${readOnlyBanner()}
   <section class="dash-hero">
-    <div class="dh-top"><div><div class="dh-greet">${greet}${me.name?"، "+esc(String(me.name).split(" ")[0]):""}</div><div class="dh-sub">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))} · آج کی فروخت</div></div>
+    <div class="dh-top"><div><div class="dh-greet">${greet}${me.name?"، "+esc(String(me.name).split(" ")[0]):""}</div><div class="dh-sub">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))} · آج کی سیل (نقد + وصولی)</div></div>
       ${S.canWrite?`<button class="dh-new" data-go="sale">+ نیا بل</button>`:""}</div>
     <div class="dh-main">
       <button class="dh-sale" data-go="sale"><span class="dh-big">${cnt(saleT)}</span>
-        <span class="dh-split"><span><i class="dot cash"></i>نقد ${fmt(cashT)}</span><span><i class="dot cred"></i>ادھار ${fmt(credT)}</span><span>${today.length} بل</span></span></button>
-      <div class="dh-week" role="img" aria-label="پچھلے سات دن کی فروخت: ${fmt(week)}">
+        <span class="dh-split"><span><i class="dot cash"></i>بلوں کا نقد ${fmt(cs.bills)}</span><span><i class="dot rec"></i>وصولی ${fmt(cs.rec)}</span>${cs.man?`<span><i class="dot man"></i>گلّے / دستی ${fmt(cs.man)}</span>`:""}<span class="dim"><i class="dot cred"></i>ادھار ${fmt(cs.credit)} (شامل نہیں)</span><span>${cs.nBills} بل</span></span></button>
+      <div class="dh-week" role="img" aria-label="پچھلے سات دن کی سیل: ${fmt(week)}">
         ${days.map((d,k)=>`<div class="wk${k===6?" today":""}" title="${WD[d.d.getDay()]}: ${fmt(d.v)}"><span class="wk-bar" style="--h:${Math.max(3,Math.round(d.v/top*100))}%;--i:${k}"></span><span class="wk-d">${k===6?"آج":WD[d.d.getDay()]}</span></div>`).join("")}
         <div class="wk-cap">سات دن: <span class="num">${fmt(week)}</span></div>
       </div>
@@ -149,7 +161,7 @@ function vHome(){
     <button data-act="newCust"><span class="q-ic">${ICON.khata}</span>نیا گاہک</button>
   </div>`:""}
   <button class="card dues" data-go="khata">
-    <div class="dues-h"><span><small>گاہکوں سے لینے ہیں</small><b class="c-owe">${cnt(recv)}</b></span><span class="dues-mid">اس ماہ فروخت <b class="num">${fmt(sum(month,s=>s.total))}</b></span><span class="end"><small>سپلائرز کو دینے ہیں</small><b class="c-pay">${cnt(payb)}</b></span></div>
+    <div class="dues-h"><span><small>گاہکوں سے لینے ہیں</small><b class="c-owe">${cnt(recv)}</b></span><span class="dues-mid">اس ماہ سیل <b class="num">${fmt(monthSale)}</b></span><span class="end"><small>سپلائرز کو دینے ہیں</small><b class="c-pay">${cnt(payb)}</b></span></div>
     <div class="dues-bar"><i class="r" style="--w:${share}%"></i><i class="g" style="--w:${100-share}%"></i></div>
   </button>
   <div class="grid2">
@@ -317,7 +329,12 @@ function reportData(){
   const days=Math.round((to-from)/864e5),monthly=days>62,buckets=new Map();
   if(monthly){const d=new Date(from);d.setDate(1);while(d.getTime()<to){buckets.set(d.getFullYear()+"-"+d.getMonth(),{t:d.getTime(),v:0,n:0});d.setMonth(d.getMonth()+1)}}
   else for(let t=from;t<to;t+=864e5)buckets.set(dayStart(t),{t,v:0,n:0});
-  for(const s of sales){const d=new Date(s.date),k=monthly?d.getFullYear()+"-"+d.getMonth():dayStart(s.date);const b=buckets.get(k);if(b){b.v+=Number(s.total)||0;b.n++}}
+  for(const b of buckets.values())Object.assign(b,{v:0,bills:0,rec:0,man:0,cr:0});
+  const keyOf=t=>{const d=new Date(t);return monthly?d.getFullYear()+"-"+d.getMonth():dayStart(t)};
+  const cs=cashSales(from,to);
+  for(const r0 of cs.rows){const b=buckets.get(keyOf(r0.date));if(b){b.v+=r0.amt;b[r0.k==="bill"?"bills":r0.k]+=r0.amt}}
+  for(const s of sales){const b=buckets.get(keyOf(s.date));if(b&&!s.manual){b.n++;b.cr+=Math.max(0,(Number(s.total)||0)-(Number(s.paid)||0))}}
+  for(const e of S.entries)if(inR(e)&&e.type==="gave"&&!e.sale&&!e.purchase&&!e.exp&&(ck(e.cust).kind||"customer")==="customer"){const b=buckets.get(keyOf(e.date));if(b)b.cr+=Number(e.amount)||0}
   // items
   const im=new Map();for(const s of sales)for(const l of s.lines||[]){const k=l.item||l.name;const o=im.get(k)||{name:l.name,unit:l.unit||"",qty:0,rev:0,prof:0};o.qty+=l.qty;o.rev+=l.qty*l.price;o.prof+=(l.price-(l.cost||0))*l.qty;im.set(k,o)}
   const items=[...im.values()].sort((a,b)=>b.rev-a.rev);
@@ -334,7 +351,7 @@ function reportData(){
   // branches
   const br=S.branches.map(b=>{const bs=allSales().filter(s=>s.branch===b.id&&s.date>=from&&s.date<to),bxa=S.expenses.filter(x=>x.branch===b.id&&x.date>=from&&x.date<to&&x.pl!==false),bi=sum(bxa.filter(x=>x.dir==="in"),x=>x.amount),bx=bxa.filter(x=>x.dir!=="in");
     const st=sum(bs,s=>s.total),bc=sum(bs,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty)),be=sum(bx,x=>x.amount);return {name:b.name,sales:st,n:bs.length,gross:st-bc,exp:be,net:st-bc-be+bi}});
-  return {from,to,label,sales,saleT,paidT,credit:saleT-paidT,cogs,gross:saleT-cogs,expT,incT,net:saleT-cogs-expT+incT,purT,purCredit:purT-sum(purch,p=>p.paid),rec,supPaid,
+  return {from,to,label,sales,saleT,paidT,cs,dsale:cs.total,credit:saleT-paidT,cogs,gross:saleT-cogs,expT,incT,net:saleT-cogs-expT+incT,purT,purCredit:purT-sum(purch,p=>p.paid),rec,supPaid,
     series:[...buckets.values()],monthly,items,custSales,expCats,recv,pay,br,nPurch:purch.length};
 }
 function chartSvg(series,monthly){
@@ -350,7 +367,7 @@ function chartSvg(series,monthly){
     const r=Math.min(4,bw/2,h);
     const path=h>0?`<path class="bar" d="M${x},${y(0)} V${y(b.v)+r} Q${x},${y(b.v)} ${x+r},${y(b.v)} H${x+bw-r} Q${x+bw},${y(b.v)} ${x+bw},${y(b.v)+r} V${y(0)} Z"/>`:"";
     return `<g data-tip="${esc(lbl)}: ${esc(fmt(b.v))} · ${b.n} بل">${path}<rect x="${x-gap/2}" y="${padT}" width="${bw+gap}" height="${H-padT-padB}" fill="transparent"/>${i%every===0?`<text x="${x+bw/2}" y="${H-8}" text-anchor="middle">${esc(lbl)}</text>`:""}</g>`}).join("");
-  return `<div class="chart-wrap" id="chartWrap"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${monthly?"ماہانہ":"روزانہ"} فروخت">${g}${bars}</svg><div class="tip" id="tip" hidden></div></div>`;
+  return `<div class="chart-wrap" id="chartWrap"><svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${monthly?"ماہانہ":"روزانہ"} سیل">${g}${bars}</svg><div class="tip" id="tip" hidden></div></div>`;
 }
 function vReport(){
   const R=reportData();S.lastReport=R;const P=[["today","آج"],["yday","کل"],["week","یہ ہفتہ"],["month","یہ مہینہ"],["lmonth","پچھلا مہینہ"],["year","یہ سال"],["custom","تاریخیں چنیں"]];
@@ -365,13 +382,14 @@ function vReport(){
     <p class="note" style="margin:0;flex-basis:100%">اوپر سے کوئی عرصہ چنیں یا یہاں اپنی مرضی کی تاریخیں ڈالیں۔ نیچے کی ساری رپورٹ اور ہر ڈاؤن لوڈ (Excel / PDF) انہی تاریخوں کا بنے گا۔</p></div>
   <div class="dl-bar"><span>${PDF_ICON} <span class="num">${new Date(R.from).toLocaleDateString("en-GB")}</span> سے <span class="num">${new Date(R.to-1).toLocaleDateString("en-GB")}</span> تک کی پوری رپورٹ</span><button class="btn xls" data-rep="xlsx">Excel</button><button class="btn pdf" data-rep="pdf">PDF</button></div>
   <div class="stats">
-    <div class="card stat"><span class="lbl">کل فروخت · ${R.sales.length} بل</span><span class="val">${fmt(R.saleT)}</span></div>
+    <div class="card stat"><span class="lbl">سیل (نقد + وصولی) · ${R.cs.nBills} بل</span><span class="val">${fmt(R.dsale)}</span></div>
     <div class="card stat"><span class="lbl">مجموعی منافع</span><span class="val">${fmt(R.gross)}</span></div>
     <div class="card stat"><span class="lbl">خرچے</span><span class="val">${fmt(R.expT)}</span></div>
     <div class="card stat ${R.net>=0?"pay":"owe"}"><span class="lbl">خالص منافع</span><span class="val">${fmt(R.net)}</span></div>
   </div>
-  <section class="card"><div class="card-h"><h3>${R.monthly?"ماہانہ":"روزانہ"} فروخت</h3>${secDl("daily")}</div>
-    ${R.saleT>0?chartSvg(R.series,R.monthly):`<div class="empty">اس عرصے میں کوئی فروخت نہیں۔</div>`}</section>
+  <section class="card"><div class="card-h"><h3>${R.monthly?"ماہانہ":"روزانہ"} سیل</h3>${secDl("daily")}</div>
+    ${R.dsale>0?chartSvg(R.series,R.monthly):`<div class="empty">اس عرصے میں کوئی سیل نہیں۔</div>`}
+    <p class="note pad" style="margin:0;padding-top:0">سیل = بلوں کا نقد ${fmt(R.cs.bills)} + گاہکوں سے وصولی ${fmt(R.cs.rec)}${R.cs.man?` + گلّے / دستی سیل ${fmt(R.cs.man)}`:""}۔ ادھار ${fmt(R.cs.credit)} سیل میں شامل نہیں، وصول ہونے پر شامل ہو گا۔</p></section>
   <div class="grid2">
     <section class="card"><div class="card-h"><h3>نفع و نقصان</h3><div class="sec-dl"><button class="btn ghost sm" data-act="copySummary">کاپی</button>${secDl("pl")}</div></div>
       <div class="kv">
@@ -422,12 +440,12 @@ const secDl=k=>`<div class="sec-dl"><button class="btn sm xls" data-sec="${k}:xl
 function reportSections(R){
   const b=S.branch,d=t=>new Date(t).toLocaleDateString("en-GB"),rng=d(R.from)+" – "+d(R.to-1);
   const sales=[...R.sales].sort((a,b2)=>a.date-b2.date),r=Math.round;
-  const bucketSales=R.series.map(x=>{const dt=new Date(x.t);return [R.monthly?dt.toLocaleDateString("en-GB",{month:"short",year:"numeric"}):d(x.t),x.n,r(x.v)]});
+  const bucketSales=R.series.map(x=>{const dt=new Date(x.t);return [R.monthly?dt.toLocaleDateString("en-GB",{month:"short",year:"numeric"}):d(x.t),x.n,r(x.bills),r(x.rec),r(x.man),r(x.v),r(x.cr)]});
   return {
     summary:{name:"خلاصہ",file:"summary",widths:[32,18],rows:[["مد","رقم"],
-      ["کل فروخت",r(R.saleT)],["بلوں کی تعداد",R.sales.length],["نقد فروخت",r(R.paidT)],["ادھار فروخت",r(R.credit)],["خرید لاگت (بکا مال)",r(R.cogs)],["مجموعی منافع",r(R.gross)],["دیگر آمدنی",r(R.incT||0)],["خرچے",r(R.expT)],["خالص منافع",r(R.net)],
+      ["سیل (نقد + وصولی)",r(R.dsale)],["کل فروخت (بل، ادھار سمیت)",r(R.saleT)],["بلوں کی تعداد",R.sales.length],["نقد فروخت",r(R.paidT)],["ادھار فروخت",r(R.credit)],["خرید لاگت (بکا مال)",r(R.cogs)],["مجموعی منافع",r(R.gross)],["دیگر آمدنی",r(R.incT||0)],["خرچے",r(R.expT)],["خالص منافع",r(R.net)],
       ["گاہکوں سے وصولی",r(R.rec)],["خریداری",r(R.purT)],["سپلائرز کو ادائیگی",r(R.supPaid)],["کل بقایا (گاہک)",r(R.recv.reduce((a,x)=>a+x.v,0))],["کل دینے ہیں (سپلائر)",r(R.pay.reduce((a,x)=>a+x.v,0))]]},
-    daily:{name:(R.monthly?"ماہانہ":"روزانہ")+" فروخت",file:"daily-sales",widths:[16,10,16],rows:[[R.monthly?"مہینہ":"تاریخ","بل","فروخت"],...bucketSales,["کل",R.sales.length,r(R.saleT)]]},
+    daily:{name:(R.monthly?"ماہانہ":"روزانہ")+" سیل",file:"daily-sales",widths:[16,8,14,14,14,14,16],rows:[[R.monthly?"مہینہ":"تاریخ","بل","بلوں کا نقد","وصولی","گلّے / دستی","کل سیل","ادھار (شامل نہیں)"],...bucketSales,["کل",R.cs.nBills,r(R.cs.bills),r(R.cs.rec),r(R.cs.man),r(R.dsale),r(R.cs.credit)]]},
     bills:{name:"بل",file:"bills",widths:[12,14,24,14,12,12,16],rows:[["تاریخ","بل نمبر","گاہک","کل","نقد","ادھار","برانچ"],...sales.map(x=>[d(x.date),x.no,x.custName||"نقد",r(x.total),r(x.paid),r(x.total-x.paid),branchName(x.branch)])]},
     pl:{name:"نفع و نقصان",file:"profit-loss",widths:[30,16],rows:[["مد","رقم"],["کل فروخت",r(R.saleT)],["خرید لاگت (بکا مال)",-r(R.cogs)],["مجموعی منافع",r(R.gross)],["دیگر آمدنی",r(R.incT||0)],...R.expCats.map(([k,v])=>["خرچہ: "+k,-r(v)]),["کل خرچے",-r(R.expT)],["خالص منافع",r(R.net)]]},
     cash:{name:"نقد اور ادھار",file:"cash-credit",widths:[30,16],rows:[["مد","رقم"],["نقد فروخت",r(R.paidT)],["ادھار فروخت",r(R.credit)],["گاہکوں سے وصولی",r(R.rec)],["خریداری (کل)",r(R.purT)],["ادھار خریداری",r(R.purCredit)],["سپلائرز کو ادائیگی",r(R.supPaid)]]},
@@ -471,7 +489,8 @@ function summaryText(){
   const R=reportData();
   return `وارثی بک — ${R.label}${S.branch!=="all"?" ("+branchName(S.branch)+")":""}
 ${new Date(R.from).toLocaleDateString("en-GB")} – ${new Date(R.to-1).toLocaleDateString("en-GB")}
-فروخت: ${fmt(R.saleT)} (${R.sales.length} بل)
+سیل (نقد + وصولی): ${fmt(R.dsale)}
+بلوں کی فروخت: ${fmt(R.saleT)} (${R.sales.length} بل)
 نقد: ${fmt(R.paidT)} · ادھار: ${fmt(R.credit)}
 مجموعی منافع: ${fmt(R.gross)}
 خرچے: ${fmt(R.expT)}
@@ -729,10 +748,25 @@ function sheetCust(id){
   if(c.kind!=="supplier"&&v>0)fillPayBox(v,0);
   qrDataUrl(ledgerQrText(c,v)).then(u=>{const q=$("#custQr");if(q)q.innerHTML=`<img src="${u}" alt="کھاتے کا QR کوڈ" width="96" height="96"><div><b>کھاتے کا QR کوڈ</b><div class="note">اس میں ${c.kind==="supplier"?"سپلائر":"گاہک"} کا نام، نمبر اور بقایا ہے۔ یہ PDF میں بھی چھپتا ہے۔</div></div>`});
 }
+/* where the money came from / went: decides the till and the daily sale */
+function srcPref(k,d){try{return localStorage.getItem("wb_src_"+k)||d}catch(e){return d}}
+function srcChoiceHtml(type){
+  const sup=(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier";
+  let opts=null,k="";
+  if(sup&&type==="gave"){k="pay";opts=[["till","گلّے کی سیل سے"],["own","اپنی جیب سے"],["bank","بینک / موبائل اکاؤنٹ"]]}
+  else if(!sup&&type==="got"){k="rec";opts=[["cash","نقد (گلّے میں)"],["bank","بینک / موبائل اکاؤنٹ"]]}
+  if(!opts)return "";
+  const cur=srcPref(k,opts[0][0]);
+  const hint={till:"یہ رقم آج کی سیل میں بھی شامل ہو جائے گی (گلّے میں سیل کا پیسہ تھا)۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"یہ رقم سیل میں شامل ہوگی، لیکن گلّے کے کیش میں نہیں جڑے گی۔",cash:"یہ رقم آج کی سیل میں شامل ہوگی اور گلّے کے کیش میں جڑے گی۔"};
+  return `<div class="fld"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
+    <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
+    <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
+}
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
     <div class="two"><div class="fld"><label for="eAmt">${(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier"?(type==="gave"?"کتنی ادائیگی کی":"کتنے کا مال ملا"):(type==="gave"?"کتنے کا ادھار":"کتنی رقم ملی")}</label><input id="eAmt" name="amount" class="num" inputmode="decimal" required></div>
     <div class="fld"><label for="eDate">تاریخ</label>${dateField("eDate","date",todayStr())}</div></div>
+    ${srcChoiceHtml(type)}
     <div class="fld"><label for="eNote">تفصیل</label><input id="eNote" name="note" placeholder="${type==="gave"?"مثلاً 10 بیگ سیمنٹ":"مثلاً نقد / بینک ٹرانسفر"}"></div>
     ${photoPicker()}
     ${S.entries.some(x=>x.cust===S.openCust&&(x.att||[]).length)?`<p class="note" style="margin:0">نئی تصویر لگانے سے اس کھاتے کی پرانی بل والی تصویر ہٹ جائے گی۔</p>`:""}
@@ -931,7 +965,7 @@ function sheetExpView(id){
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
     ${expEditHtml(x)}
-    ${dateEditHtml("expenses",x)}
+    ${x.payFor?"":dateEditHtml("expenses",x)}
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
 }
@@ -1119,6 +1153,7 @@ document.addEventListener("submit",async ev=>{
     const nd=withDate(x.date,d.date);
     await w(()=>{db.update(col,id,{date:nd});
       if(col==="expenses")for(const e of S.entries.filter(e=>e.exp===id))db.update("entries",e.id,{date:withDate(e.date,d.date)});
+      if(col==="entries")for(const x of S.expenses.filter(x=>x.payFor===id))db.update("expenses",x.id,{date:withDate(x.date,d.date)});
       if(col==="expenses")for(const e of S.expenses.filter(e=>e.ownFor===id||e.saleFor===id))db.update("expenses",e.id,{date:withDate(e.date,d.date)});});
     toast("تاریخ بدل گئی: "+new Date(nd).toLocaleDateString("en-GB"));
     if(col==="entries")sheetEntryView(id);else sheetExpView(id);
@@ -1129,7 +1164,12 @@ document.addEventListener("submit",async ev=>{
     if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const att=savePhotos({kind:"entry",cust:S.openCust}),eid=newId("entries");
-    ok=await w(()=>db.set("entries",eid,{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...by()}));
+    const src=d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
+    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...(src?{src}:{}),...by()}}];
+    const nm=(c&&c.name)||"";
+    if(src==="till")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
+    if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
+    ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
     if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
   }
@@ -1253,6 +1293,7 @@ document.addEventListener("click",async ev=>{
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
+  if(ds.src){const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
   if(ds.expedit){const x=S.expenses.find(v=>v.id===ds.expedit);if(x)sheetExpense(x.dir==="in"?"in":"out",x);return}
   if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
@@ -1318,7 +1359,7 @@ document.addEventListener("click",async ev=>{
   if(ds.entry){S.photos=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
   if(ds.delentry){const box=$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=`<div class="confirm">یہ اندراج حذف کریں؟<button class="btn owe sm" data-delyes="${esc(ds.delentry)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
-  if(ds.delyes){if(await w(()=>db.remove("entries",ds.delyes))){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
+  if(ds.delyes){const id=ds.delyes;if(await w(()=>{db.remove("entries",id);for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
   if("delno" in ds){t.closest(".confirm").remove();return}
   if(ds.rm){S.cart.splice(+ds.rm,1);render();return}
   if(ds.copybill){const s=S.sales.find(x=>x.id===ds.copybill);const txt=`بل #${s.no}\n${new Date(s.date).toLocaleString("en-GB")}\n${s.custName||"نقد گاہک"}\n`+(s.lines||[]).map(l=>`${l.name}  ${fq(l.qty)} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\nکل: ${fmt(s.total)}\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"");

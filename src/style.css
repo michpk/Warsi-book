@@ -526,3 +526,5 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .sc-bottom .btn{min-width:120px;justify-content:center}
 #scanCam .btn{background:rgba(255,255,255,.14);color:#fff;border:1px solid rgba(255,255,255,.3)}
 #scanCam .sc-done{background:var(--brass);color:#1d1606;border-color:var(--brass);font-weight:700}
+.dot.rec{background:#8fd0ff}.dot.man{background:#f3dfa6}
+.dh-split .dim{opacity:.65}
