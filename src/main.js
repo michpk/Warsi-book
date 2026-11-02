@@ -769,9 +769,17 @@ function askSale(amount,text){
    Returns and discounts lower the balance only — they are not sale and no cash came into the till. */
 const GOT_KINDS=[["pay","ادائیگی (رقم ملی)"],["ret","مال واپسی"],["disc","ڈسکاؤنٹ / چھوٹ"]];
 const GK_LABEL={ret:"مال واپسی",disc:"ڈسکاؤنٹ / چھوٹ"};
-const GK_HINT={ret:"گاہک نے مال واپس کیا۔ اس کے کھاتے سے رقم کم ہو جائے گی، لیکن یہ نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔",disc:"گاہک کو اتنی رقم چھوڑ دی گئی (کھاتہ برابر کرنے کے لیے)۔ کھاتے سے کم ہوگی، لیکن نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔"};
+const GK_HINT={ret:"گاہک نے مال واپس کیا۔ نیچے چیز چنیں تو وہ اسٹاک میں واپس جڑ جائے گی۔ کھاتے سے رقم کم ہوگی، لیکن یہ نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔",disc:"گاہک کو اتنی رقم چھوڑ دی گئی (کھاتہ برابر کرنے کے لیے)۔ کھاتے سے کم ہوگی، لیکن نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔"};
 /* not real money in: a return or a discount */
 const noMoney=e=>e.gk==="ret"||e.gk==="disc";
+/* goods-return lines: [{item,name,unit,qty,price}] — the amount follows their total */
+function renderRet(){
+  const box=$("#retLines");if(!box)return;const L=S.retLines||[];
+  box.innerHTML=L.length?`<div class="cart-line ret-h note"><span>چیز</span><span>تعداد</span><span>ریٹ</span><span></span></div>`+L.map((l,i)=>`<div class="cart-line"><div style="min-width:0;font-weight:600">${esc(l.name)} <span class="note">${esc(l.unit||"")}</span></div><input data-rq="${i}" inputmode="decimal" value="${l.qty}" aria-label="تعداد"><input data-rp="${i}" inputmode="decimal" value="${l.price}" aria-label="ریٹ"><button type="button" class="x" data-rrm="${i}" aria-label="ہٹائیں">×</button></div>`).join("")
+    +`<p class="note" style="margin:6px 0 0">کل: <b class="num">${fmt(retTotal())}</b> — یہی رقم کھاتے سے کم ہوگی (اوپر بدل بھی سکتے ہیں)</p>`:`<p class="note" style="margin:6px 0 0">چیز نہ چنیں تو صرف رقم کھاتے سے کم ہوگی، اسٹاک نہیں بدلے گا۔</p>`;
+}
+const retTotal=()=>Math.round((S.retLines||[]).reduce((a,l)=>a+(Number(l.qty)||0)*(Number(l.price)||0),0)*100)/100;
+function syncRetAmt(){const a=$("#eAmt");if(a&&(S.retLines||[]).length)a.value=String(retTotal())}
 function srcChoiceHtml(type){
   const sup=(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier";
   let opts=null,k="";
@@ -782,7 +790,11 @@ function srcChoiceHtml(type){
   const hint={till:"رقم گلّے سے گئی۔ محفوظ کرتے وقت پوچھا جائے گا کہ اسے آج کی سیل میں شامل کرنا ہے یا نہیں۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"گلّے کے کیش میں نہیں جڑے گی۔ محفوظ کرتے وقت پوچھا جائے گا کہ سیل میں شامل کرنی ہے یا نہیں۔",cash:"گلّے کے کیش میں جڑے گی۔ محفوظ کرتے وقت پوچھا جائے گا کہ سیل میں شامل کرنی ہے یا نہیں۔"};
   const gk=k==="rec"?`<div class="fld"><span class="lbl-sm">یہ کس چیز کا اندراج ہے؟</span><input type="hidden" name="gk" id="eGk" value="pay">
     <div class="seg" id="eGkSeg">${GOT_KINDS.map(([v,l])=>`<button type="button" data-gk="${v}" aria-pressed="${v==="pay"}">${l}</button>`).join("")}</div>
-    <p class="note" id="eGkHint" style="margin:4px 0 0" hidden></p></div>`:"";
+    <p class="note" id="eGkHint" style="margin:4px 0 0" hidden></p>
+    <div id="retBox" class="ret-box" hidden><span class="lbl-sm">کون سا مال واپس آیا؟ (اسٹاک میں واپس جڑ جائے گا)</span>
+      <input id="retPick" list="retItemList" placeholder="چیز کا نام لکھ کر چنیں یا بارکوڈ لکھیں" autocomplete="off">
+      <datalist id="retItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${esc(it.unit||"")} · Rs ${fq(it.sale)}</option>`).join("")}</datalist>
+      <div id="retLines"></div></div></div>`:"";
   return gk+`<div class="fld" id="eSrcBox"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
     <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
     <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
@@ -1013,6 +1025,7 @@ function sheetEntryView(id){
   S.openCust=null;
   openSheet(c.name||"اندراج",`
     <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
+    ${(e.lines||[]).length?`<h4 style="margin:14px 0 8px;font-size:14px">واپس آیا مال (اسٹاک میں جڑ چکا)</h4><div class="list">${e.lines.map(l=>`<div class="row" style="cursor:default"><div class="main"><div class="t">${esc(l.name)}</div><div class="s"><span class="num">${fq(l.qty)}</span> ${esc(l.unit||"")} × Rs <span class="num">${fq(l.price)}</span></div></div><div class="amt"><div class="v">${fmt(l.qty*l.price)}</div></div></div>`).join("")}</div>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
@@ -1194,12 +1207,15 @@ document.addEventListener("submit",async ev=>{
       if(inSale===null){if(btn)btn.disabled=false;return}
     }
     const note=gk?GK_LABEL[gk]+(d.note.trim()?" · "+d.note.trim():""):d.note.trim();
-    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...by()}}];
+    const rl=gk==="ret"?(S.retLines||[]).filter(l=>l.qty>0&&S.items.some(x=>x.id===l.item)):[];
+    const rb=(c&&c.branch&&S.branches.some(b=>b.id===c.branch))?c.branch:defBranch();
+    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...(rl.length?{lines:rl,stockBranch:rb}:{}),...by()}}];
+    for(const l of rl)ops.push({op:"stock",id:l.item,branch:rb,delta:l.qty});
     if(src==="till"&&inSale)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
-    if(ok){toast("اندراج محفوظ");sheetCust(S.openCust)}
+    if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
   }
   if(kind==="item"){
     const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,buyCost=num(d.cost);
@@ -1327,7 +1343,7 @@ document.addEventListener("click",async ev=>{
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
   if(ds.gk){const i=$("#eGk");if(i){i.value=ds.gk;document.querySelectorAll("#eGkSeg [data-gk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.gk===ds.gk));
-    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";
+    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";const rb=$("#retBox");if(rb){rb.hidden=ds.gk!=="ret";if(ds.gk==="ret")renderRet()}
     const lb=document.querySelector('label[for="eAmt"]');if(lb)lb.textContent=ds.gk==="ret"?"کتنے کا مال واپس آیا":ds.gk==="disc"?"کتنی رقم چھوڑی":"کتنی رقم ملی"}return}
   if(ds.src){const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
@@ -1392,10 +1408,12 @@ document.addEventListener("click",async ev=>{
   if(ds.edititem){sheetItemForm(S.items.find(c=>c.id===ds.edititem));return}
   if(ds.editbranch){sheetBranch(S.branches.find(c=>c.id===ds.editbranch));return}
   if(ds.setbranch){S.branch=ds.setbranch;try{localStorage.setItem("hk_branch",S.branch)}catch(e){};S.tab="home";render();return}
-  if(ds.entry){S.photos=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
+  if(ds.rrm!==undefined){S.retLines.splice(+ds.rrm,1);renderRet();syncRetAmt();return}
+  if(ds.entry){S.photos=[];S.retLines=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
   if(ds.delentry){const box=$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=`<div class="confirm">یہ اندراج حذف کریں؟<button class="btn owe sm" data-delyes="${esc(ds.delentry)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
-  if(ds.delyes){const id=ds.delyes;if(await w(()=>{db.remove("entries",id);for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
+  if(ds.delyes){const id=ds.delyes,de=S.entries.find(x=>x.id===id);if(await w(()=>{db.remove("entries",id);
+    if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
   if("delno" in ds){t.closest(".confirm").remove();return}
   if(ds.rm){S.cart.splice(+ds.rm,1);render();return}
   if(ds.copybill){const s=S.sales.find(x=>x.id===ds.copybill);const txt=`بل #${s.no}\n${new Date(s.date).toLocaleString("en-GB")}\n${s.custName||"نقد گاہک"}\n`+(s.lines||[]).map(l=>`${l.name}  ${fq(l.qty)} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\nکل: ${fmt(s.total)}\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"");
@@ -1437,6 +1455,7 @@ document.addEventListener("input",e=>{
   const t=e.target;
   if(t.id==="q"){S.q=t.value;const pos=t.selectionStart;render();const n=$("#q");n.focus();n.setSelectionRange(pos,pos)}
   if(t.id==="sq"){S.stockQ=t.value;const pos=t.selectionStart;render();const n=$("#sq");n.focus();n.setSelectionRange(pos,pos)}
+  if(t.dataset.rq!==undefined||t.dataset.rp!==undefined){const l=S.retLines[+(t.dataset.rq??t.dataset.rp)];if(l){l[t.dataset.rq!==undefined?"qty":"price"]=num(t.value);syncRetAmt();const tt=document.querySelector("#retLines b.num");if(tt)tt.textContent=fmt(retTotal())}}
   if(t.dataset.cq!==undefined){S.cart[+t.dataset.cq].qty=num(t.value);updTotal()}
   if(t.dataset.cp!==undefined){S.cart[+t.dataset.cp].price=num(t.value);updTotal()}
   if(t.id==="salePaid"){S.salePaid=t.value;updTotal()}
@@ -1457,6 +1476,9 @@ document.addEventListener("input",e=>{
 document.addEventListener("change",e=>{
   const t=e.target;
   if(t.id==="itemPick"){const v=t.value.trim(),it=S.items.find(x=>x.name===v),bc=!it&&findCode(v);if(it||bc){addSaleLine(it||bc.it,it?1:bc.n);$("#itemPick").focus()}else if(v)toast("یہ چیز اسٹاک میں نہیں۔ پہلے اسٹاک میں شامل کریں۔")}
+  if(t.id==="retPick"){const v=t.value.trim(),it=S.items.find(x=>x.name===v),bc=!it&&findCode(v),x=it||(bc&&bc.it);
+    if(x){const n=it?1:bc.n,ex=S.retLines.find(l=>l.item===x.id);if(ex)ex.qty=Math.round((ex.qty+n)*1000)/1000;else S.retLines.push({item:x.id,name:x.name,unit:x.unit||"",qty:n,price:Number(x.sale)||0});t.value="";renderRet();syncRetAmt();t.focus()}
+    else if(v)toast("یہ چیز اسٹاک میں نہیں ملی")}
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
