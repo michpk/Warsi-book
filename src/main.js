@@ -67,7 +67,7 @@ function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
   for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp||e.src==="bank")continue;const c=ck(e.cust),sup=c.kind==="supplier";
-    if(!sup&&e.type==="got")inR.push({date:e.date,amt:e.amount,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")});
+    if(!sup&&e.type==="got"&&!noMoney(e))inR.push({date:e.date,amt:e.amount,noTill:e.inSale===false,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")+(e.inSale===false?" — پہلے ہی گلّے کی سیل میں گنی جا چکی، دوبارہ نہیں جڑی":"")});
     if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
   for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
@@ -82,7 +82,7 @@ function cashSales(from,to){
   const rows=[];let bills=0,rec=0,man=0,credit=0,nBills=0;
   for(const s of S.sales)if(inR(s)){nBills++;const p=Number(s.paid)||0,t=Number(s.total)||0;if(p>0){bills+=p;rows.push({date:s.date,amt:p,k:"bill"})}if(t>p)credit+=t-p}
   for(const e of S.entries)if(inR(e)&&!e.sale&&!e.purchase&&!e.exp&&(ck(e.cust).kind||"customer")==="customer"){
-    if(e.type==="got"){rec+=Number(e.amount)||0;rows.push({date:e.date,amt:Number(e.amount)||0,k:"rec"})}else credit+=Number(e.amount)||0}
+    if(e.type==="got"){if(noMoney(e)||e.inSale===false)continue;rec+=Number(e.amount)||0;rows.push({date:e.date,amt:Number(e.amount)||0,k:"rec"})}else credit+=Number(e.amount)||0}
   for(const x of S.expenses)if(inR(x)&&x.dir==="in"&&x.sale){man+=Number(x.amount)||0;rows.push({date:x.date,amt:Number(x.amount)||0,k:"man"})}
   return {bills,rec,man,credit,nBills,total:bills+rec+man,rows};
 }
@@ -323,7 +323,7 @@ function reportData(){
   const cogs=sum(sales,s=>sum(s.lines||[],l=>(l.cost||0)*l.qty));
   const expT=sum(exps,x=>x.amount),incT=sum(incs,x=>x.amount),purT=sum(purch,p=>p.total);
   const ck=id=>S.customers.find(c=>c.id===id)||{};
-  const rec=sum(S.entries.filter(e=>inR(e)&&e.type==="got"&&!e.sale&&!e.purchase&&ck(e.cust).kind!=="supplier"),e=>e.amount);
+  const rec=sum(S.entries.filter(e=>inR(e)&&e.type==="got"&&!e.sale&&!e.purchase&&!noMoney(e)&&e.inSale!==false&&ck(e.cust).kind!=="supplier"),e=>e.amount);
   const supPaid=sum(S.entries.filter(e=>inR(e)&&e.type==="gave"&&!e.exp&&ck(e.cust).kind==="supplier"),e=>e.amount);
   // daily / monthly series
   const days=Math.round((to-from)/864e5),monthly=days>62,buckets=new Map();
@@ -750,6 +750,28 @@ function sheetCust(id){
 }
 /* where the money came from / went: decides the till and the daily sale */
 function srcPref(k,d){try{return localStorage.getItem("wb_src_"+k)||d}catch(e){return d}}
+/* on save: "should this money go into the sale?"  resolves true (yes) / false (no) / null (go back) */
+function askSale(amount,text){
+  return new Promise(res=>{
+    const el=document.createElement("div");el.id="askSale";el.setAttribute("dir","rtl");el.setAttribute("lang","ur");
+    el.innerHTML=`<div class="ask-box" role="alertdialog" aria-modal="true" aria-labelledby="askT"><h3 id="askT">کیا یہ رقم سیل میں شامل کرنی ہے؟</h3>
+      <div class="ask-amt num">${fmt(amount)}</div><p class="note">${esc(text)}</p>
+      <div class="ask-btns"><button type="button" class="btn pay" data-a="1">ہاں، سیل میں شامل کریں</button><button type="button" class="btn" data-a="0">نہیں، سیل میں شامل نہ کریں</button></div>
+      <button type="button" class="ask-back" data-a="">← واپس جائیں</button></div>`;
+    const done=v=>{document.removeEventListener("keydown",key,true);el.remove();res(v)};
+    const key=ev=>{if(ev.key==="Escape"){ev.preventDefault();ev.stopPropagation();done(null)}};
+    el.addEventListener("click",ev=>{const b=ev.target.closest("[data-a]");if(b)done(b.dataset.a==="1"?true:b.dataset.a==="0"?false:null);else if(ev.target===el)done(null)});
+    document.addEventListener("keydown",key,true);
+    document.body.appendChild(el);setTimeout(()=>el.querySelector("[data-a='1']").focus(),30);
+  });
+}
+/* what a customer's "got" entry is: a real payment, goods returned, or money let off (discount).
+   Returns and discounts lower the balance only — they are not sale and no cash came into the till. */
+const GOT_KINDS=[["pay","ادائیگی (رقم ملی)"],["ret","مال واپسی"],["disc","ڈسکاؤنٹ / چھوٹ"]];
+const GK_LABEL={ret:"مال واپسی",disc:"ڈسکاؤنٹ / چھوٹ"};
+const GK_HINT={ret:"گاہک نے مال واپس کیا۔ اس کے کھاتے سے رقم کم ہو جائے گی، لیکن یہ نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔",disc:"گاہک کو اتنی رقم چھوڑ دی گئی (کھاتہ برابر کرنے کے لیے)۔ کھاتے سے کم ہوگی، لیکن نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔"};
+/* not real money in: a return or a discount */
+const noMoney=e=>e.gk==="ret"||e.gk==="disc";
 function srcChoiceHtml(type){
   const sup=(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier";
   let opts=null,k="";
@@ -757,11 +779,13 @@ function srcChoiceHtml(type){
   else if(!sup&&type==="got"){k="rec";opts=[["cash","نقد (گلّے میں)"],["bank","بینک / موبائل اکاؤنٹ"]]}
   if(!opts)return "";
   const cur=srcPref(k,opts[0][0]);
-  const hint={till:"رقم گلّے سے گئی۔ نیچے بتائیں کہ اس سیل کا بل بنا تھا یا نہیں۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"یہ رقم سیل میں شامل ہوگی، لیکن گلّے کے کیش میں نہیں جڑے گی۔",cash:"یہ رقم آج کی سیل میں شامل ہوگی اور گلّے کے کیش میں جڑے گی۔"};
-  return `<div class="fld"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
+  const hint={till:"رقم گلّے سے گئی۔ محفوظ کرتے وقت پوچھا جائے گا کہ اسے آج کی سیل میں شامل کرنا ہے یا نہیں۔",own:"یہ رقم \"مالک نے رقم ڈالی\" کے نام سے نیلی لکھی جائے گی، سیل میں شامل نہیں ہوگی۔",bank:sup?"گلّے کے کیش سے کچھ کم نہیں ہوگا۔":"گلّے کے کیش میں نہیں جڑے گی۔ محفوظ کرتے وقت پوچھا جائے گا کہ سیل میں شامل کرنی ہے یا نہیں۔",cash:"گلّے کے کیش میں جڑے گی۔ محفوظ کرتے وقت پوچھا جائے گا کہ سیل میں شامل کرنی ہے یا نہیں۔"};
+  const gk=k==="rec"?`<div class="fld"><span class="lbl-sm">یہ کس چیز کا اندراج ہے؟</span><input type="hidden" name="gk" id="eGk" value="pay">
+    <div class="seg" id="eGkSeg">${GOT_KINDS.map(([v,l])=>`<button type="button" data-gk="${v}" aria-pressed="${v==="pay"}">${l}</button>`).join("")}</div>
+    <p class="note" id="eGkHint" style="margin:4px 0 0" hidden></p></div>`:"";
+  return gk+`<div class="fld" id="eSrcBox"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
     <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
-    <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p>
-    ${k==="pay"?BILLED_Q("eBilled","billed",billedPref(),cur==="till"?"":" hidden"):""}</div>`;
+    <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -1012,10 +1036,6 @@ function suggSupp(){
   box.innerHTML=hits.map(c=>`<button type="button" data-pickss="${esc(c.name)}">${esc(c.name)}${c.phone?` <span class="note num">${esc(c.phone)}</span>`:""}</button>`).join("")+(v&&!list.some(c=>(c.name||"").toLowerCase()===v)?`<div class="sugg-new">+ "${esc((($("#xSupp")||{}).value||"").trim())}" نیا سپلائر بنے گا</div>`:"");
   box.hidden=!box.innerHTML;
 }
-/* "was this till sale already entered through a bill?"  — if yes, it must not be added to the sale again */
-function billedPref(){try{const v=localStorage.getItem("wb_billed");return v!=null?v==="1":localStorage.getItem("wb_tillsale")==="0"}catch(e){return false}}
-function setBilledPref(v){try{localStorage.setItem("wb_billed",v?"1":"0")}catch(e){}}
-const BILLED_Q=(id,name,checked,extra="")=>`<label class="sale-toggle billed-q"${extra}><input type="checkbox" id="${id}" name="${name}" ${checked?"checked":""}> <span><b>کیا گلّے کی یہ سیل بل کے ذریعے درج ہو چکی ہے؟</b><small id="${id}Hint">ٹک کریں اگر اس رقم کی سیل کا بل بنا تھا، تب یہ دوبارہ سیل میں نہیں جڑے گی۔ ٹک نہ کریں تو یہ رقم آج کی سیل میں شامل ہو جائے گی۔</small></span></label>`;
 function syncOwn(){
   const h=$("#xOwnHint");if(!h)return;const own=num(($("#xOwn")||{}).value);
   const amt=calcEval(($("#xAmt")||{}).value)||0,v=(($("#xSupp")||{}).value||"").trim(),led=v&&($("#xLedger")||{}).checked;
@@ -1024,7 +1044,6 @@ function syncOwn(){
   h.textContent=!own?"جو رقم آپ نے اپنی جیب سے دی، وہ \"مالک نے رقم ڈالی\" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔"
     :own>cash?`اپنی جیب کی رقم نقد ادائیگی (${fmt(cash)}) سے زیادہ نہیں ہو سکتی۔`
     :`گلّے سے ${fmt(cash-own)} گیا · اپنی جیب سے ${fmt(own)} (یہ "مالک نے رقم ڈالی" کی آمد میں درج ہوگا)`;
-  const th=$("#xBilledHint");if(th&&cash-own>0&&own<=cash)th.textContent=$("#xBilled").checked?`گلّے سے گئے ${fmt(cash-own)} سیل میں دوبارہ نہیں جڑیں گے (بل میں گنے جا چکے)۔`:`گلّے سے گئے ${fmt(cash-own)} آج کی سیل میں شامل ہو جائیں گے، کیونکہ اس سیل کا بل نہیں بنا۔`;
 }
 function syncExpSupp(){
   const v=(($("#xSupp")||{}).value||"").trim(),more=$("#xSuppMore");if(!more)return;more.hidden=!v;
@@ -1046,7 +1065,6 @@ function sheetExpense(dir="out",edit=null){
       ${rest.length?`<select id="catMore" aria-label="مزید قسمیں"><option value="">مزید قسمیں (${rest.length}) ▾</option>${rest.map(([c])=>`<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select>`:""}`})()}</div>
     <div class="fld"><label for="xCat">قسم (اوپر سے چنیں یا نئی لکھیں)</label><input id="xCat" name="cat" required placeholder="${inc?"مثلاً پرانی مشین فروخت":"مثلاً موبائل بیلنس"}" autocomplete="off"></div>
     <label class="note" id="plRow" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="xPl" name="pl" checked> ${inc?"یہ آمدنی نفع و نقصان میں \"دیگر آمدنی\" کے طور پر گنی جائے":"یہ خرچہ نفع و نقصان میں خرچ کے طور پر گنا جائے (مالک کی ذاتی رقم ہو تو ٹک ہٹا دیں)"}</label>
-    ${inc?`<label class="sale-toggle"><input type="checkbox" id="xSale" name="sale"> <span><b>اسے فروخت میں شمار کریں</b><small>ٹک کریں تو یہ رقم آج کی فروخت، روزانہ فروخت اور رپورٹس میں "فروخت" میں جڑے گی۔ ٹک نہ کریں تو صرف آمد رہے گی۔</small></span></label>`:""}
     <div class="fld"><label for="xNote">تفصیل</label><input id="xNote" name="note"></div>
     ${inc?"":`<div class="supp-box">
       <div class="fld"><label for="xSuppSel">سپلائر / دکاندار (اختیاری)</label>
@@ -1065,8 +1083,7 @@ function sheetExpense(dir="out",edit=null){
       </div>
     </div>
     <div class="own-box"><div class="fld"><label for="xOwn">نقد میں سے کتنا اپنی جیب سے دیا؟ (اختیاری)</label><input id="xOwn" name="own" class="num" inputmode="decimal" placeholder="0 — سب گلّے سے دیا"></div>
-      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ "مالک نے رقم ڈالی" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔</p>
-      ${BILLED_Q("xBilled","billed",billedPref())}</div>`}
+      <p class="note" id="xOwnHint" style="margin:0">جو رقم آپ نے اپنی جیب سے دی، وہ "مالک نے رقم ڈالی" کے نام سے نیلے رنگ میں ریکارڈ ہو جائے گی۔ یہ گلّے کے کیش اور منافع میں نہیں گنی جاتی۔</p></div>`}
     <div class="fld"><label for="xBranch">برانچ</label><select id="xBranch" name="branch">${branchOptions(defBranch())}</select></div>
     ${photoPicker()}
     <p class="note" style="margin:0">نئی قسم ایک بار لکھنے کے بعد اگلی بار اوپر خود نظر آئے گی۔ ${inc?"مالک کی ڈالی ہوئی رقم، بینک سے نکالی یا قرض صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔":"مالک کی نکالی ہوئی رقم، بینک میں جمع یا قرض کی واپسی صرف کیش میں گنے جاتے ہیں، منافع میں نہیں۔"}</p>
@@ -1079,7 +1096,6 @@ function fillExpense(x){
   const chk=(id,v)=>{const el=$("#"+id);if(el){el.checked=!!v;el.dispatchEvent(new Event("change",{bubbles:true}))}};
   set("xAmt",String(x.amount||""));set("xDate",ymd(x.date));
   set("xCat",expCat(x));syncCat();chk("xPl",x.pl!==false);
-  if(x.dir==="in")chk("xSale",x.sale);
   set("xNote",String(x.note||"").split(" · ").slice(1).join(" · "));
   if(x.branch!=null)set("xBranch",x.branch);
   if(x.dir!=="in"){
@@ -1088,7 +1104,6 @@ function fillExpense(x){
       const paid=x.paid!=null?Number(x.paid):Number(x.amount);S.xMode=paid>=x.amount?"cash":paid<=0?"credit":"part";
       if(S.xMode==="part")set("xPaid",String(paid));syncExpSupp();}
     set("xOwn",x.own?String(x.own):"");
-    chk("xBilled",!(x.tillSale>0)&&(Math.max(0,(x.paid!=null?x.paid:x.amount)-(x.own||0))>0||billedPref()));
   }
   const n=document.querySelector('form[data-form="expense"] .note:last-of-type');
   const box=document.createElement("p");box.className="note edit-note";box.textContent="محفوظ کرنے پر پرانا اندراج اس نئی معلومات سے بدل جائے گا۔ سپلائر کے کھاتے، اپنی جیب اور گلّے والے اندراجات بھی ساتھ ٹھیک ہو جائیں گے۔ پرانی تصویریں ساتھ رہیں گی۔";
@@ -1168,11 +1183,19 @@ document.addEventListener("submit",async ev=>{
     if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const att=savePhotos({kind:"entry",cust:S.openCust}),eid=newId("entries");
-    const src=d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
-    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note:d.note.trim(),date:dt,branch:c?c.branch:"",...(src?{src}:{}),...by()}}];
+    const gk=d.gk&&d.gk!=="pay"?d.gk:"";
+    const src=gk?"":d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
     const nm=(c&&c.name)||"";
-    if(src==="till")setBilledPref(!!d.billed);
-    if(src==="till"&&!d.billed)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
+    // money in from a customer, or a supplier paid out of the till's sale: ask whether it goes into the sale
+    let inSale=null;
+    if(src==="cash"||src==="bank"||src==="till"){
+      inSale=await askSale(amt,src==="till"?`${nm} کو یہ ادائیگی گلّے کی سیل کے پیسوں سے کی گئی۔ کیا یہ رقم آج کی سیل میں شامل کرنی ہے؟ (اگر اس سیل کا بل پہلے بن چکا ہے تو "نہیں" دبائیں)`
+        :`${nm} سے رقم ملی۔ اگر یہ رقم پہلے ہی گلّے کی روزانہ سیل میں گنی جا چکی ہے تو "نہیں" دبائیں — پھر یہ نہ سیل میں دوبارہ جڑے گی نہ گلّے کے کیش میں۔`);
+      if(inSale===null){if(btn)btn.disabled=false;return}
+    }
+    const note=gk?GK_LABEL[gk]+(d.note.trim()?" · "+d.note.trim():""):d.note.trim();
+    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...by()}}];
+    if(src==="till"&&inSale)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
@@ -1215,15 +1238,20 @@ document.addEventListener("submit",async ev=>{
     let sup=link?S.customers.find(c=>c.kind==="supplier"&&(c.name||"").trim().toLowerCase()===sname.toLowerCase()):null;
     if(link&&!sup){sup={id:newId("customers"),name:sname};ops.push({op:"set",col:"customers",id:sup.id,data:{name:sname,phone:(d.suppPhone||"").trim(),kind:"supplier",branch:d.branch||"",address:"",createdAt:Date.now(),...by()}})}
     const note=cat+(d.note.trim()?" · "+d.note.trim():"");
-    ops.push({op:"set",col:"expenses",id:xid,data:{amount:amt,paid,dir,att,sale:dir==="in"&&!!d.sale,pl:known?known[1]:!!d.pl,note,date:dt,branch:d.branch||"",...(link?{supp:sup.id,suppName:sup.name}:sname?{suppName:sname}:{}),...by(),...(old?{by:old.by,byName:old.byName,editedBy:me.name||"",editedAt:Date.now()}:{})}});
+    const pl=known?known[1]:!!d.pl,own0=dir==="out"?num(d.own):0,till0=dir==="out"?Math.max(0,paid-own0):0;
+    if(own0>paid){toast("اپنی جیب کی رقم نقد ادائیگی سے زیادہ نہیں ہو سکتی");if(btn)btn.disabled=false;return}
+    // ask on save whether this money goes into the sale (income that is real earning, or the till part of an expense)
+    let inSale=false;
+    if(dir==="in"&&pl&&cat!==OWNER_IN)inSale=await askSale(amt,`"${cat}" کی آمد۔ کیا یہ رقم فروخت (سیل) میں شامل کرنی ہے؟ "نہیں" دبائیں تو یہ صرف آمد رہے گی۔`);
+    else if(till0>0)inSale=await askSale(till0,`یہ ${fmt(till0)} گلّے کی سیل کے پیسوں سے دیے گئے۔ کیا یہ رقم آج کی سیل میں شامل کرنی ہے؟ (اگر اس سیل کا بل پہلے بن چکا ہے تو "نہیں" دبائیں)`);
+    if(inSale===null){if(btn)btn.disabled=false;return}
+    ops.push({op:"set",col:"expenses",id:xid,data:{amount:amt,paid,dir,att,sale:dir==="in"&&inSale,pl:known?known[1]:!!d.pl,note,date:dt,branch:d.branch||"",...(link?{supp:sup.id,suppName:sup.name}:sname?{suppName:sname}:{}),...by(),...(old?{by:old.by,byName:old.byName,editedBy:me.name||"",editedAt:Date.now()}:{})}});
     if(link){ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"got",amount:amt,note:"خرچہ: "+note,date:dt,branch:d.branch||"",exp:xid,...by()}});
       if(paid>0)ops.push({op:"set",col:"entries",id:newId("entries"),data:{cust:sup.id,type:"gave",amount:paid,note:"خرچہ (نقد ادا): "+cat,date:dt+1,branch:d.branch||"",exp:xid,...by()}})}
     const own=dir==="out"?num(d.own):0;
-    if(own>paid){toast("اپنی جیب کی رقم نقد ادائیگی سے زیادہ نہیں ہو سکتی");if(btn)btn.disabled=false;return}
     if(own>0)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:own,dir:"in",pl:false,sale:false,att:[],note:"مالک نے رقم ڈالی · "+cat+(sname?" ("+sname+")":"")+" کے لیے",date:dt-1,branch:d.branch||"",ownFor:xid,...by()}});
     if(own>0)ops.find(o=>o.id===xid).data.own=own;
-    const till=dir==="out"&&!d.billed?Math.max(0,paid-own):0;
-    if(dir==="out")setBilledPref(!!d.billed);
+    const till=inSale?till0:0;
     if(till>0){ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:till,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · "+cat+(sname?" ("+sname+")":"")+" کو ادا کی",date:dt-2,branch:d.branch||"",saleFor:xid,...by()}});ops.find(o=>o.id===xid).data.tillSale=till}
     ok=await w(()=>db.batch(ops));
     if(ok){closeSheet();toast(old?"تبدیلی محفوظ":dir==="in"?"آمد محفوظ":own>0?"خرچہ اور اپنی جیب کی رقم محفوظ":"خرچہ محفوظ")}
@@ -1298,7 +1326,10 @@ document.addEventListener("click",async ev=>{
   if(t.id==="sheet")return;
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
-  if(ds.src){const bq=document.querySelector("#eSrcSeg ~ .billed-q");if(bq)bq.hidden=ds.src!=="till";const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
+  if(ds.gk){const i=$("#eGk");if(i){i.value=ds.gk;document.querySelectorAll("#eGkSeg [data-gk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.gk===ds.gk));
+    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";
+    const lb=document.querySelector('label[for="eAmt"]');if(lb)lb.textContent=ds.gk==="ret"?"کتنے کا مال واپس آیا":ds.gk==="disc"?"کتنی رقم چھوڑی":"کتنی رقم ملی"}return}
+  if(ds.src){const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
   if(ds.expedit){const x=S.expenses.find(v=>v.id===ds.expedit);if(x)sheetExpense(x.dir==="in"?"in":"out",x);return}
   if(ds.dset||ds.dstep){const inp=document.getElementById(ds.dset||ds.dstep);if(!inp)return;
@@ -1432,7 +1463,6 @@ document.addEventListener("change",e=>{
   if(t.id==="catMore"&&t.value){const inp=$("#xCat");inp.value=t.value;syncCat()}
   if(t.id==="xLedger"||t.id==="xSupp")syncExpSupp();
   if(t.id==="xSuppSel"){const i=$("#xSupp");if(i){i.value=t.value;$("#xSuppSug").hidden=true;syncExpSupp()}}
-  if(t.id==="xBilled")syncOwn();
   if(t.id==="bulkFile"&&t.files&&t.files[0]){readBulk(t.files[0]);t.value=""}
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}

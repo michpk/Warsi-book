@@ -529,3 +529,13 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .dot.rec{background:#8fd0ff}.dot.man{background:#f3dfa6}
 .dh-split .dim{opacity:.65}
 .billed-q[hidden]{display:none}
+/* "include in sale?" question on save */
+#askSale{position:fixed;inset:0;z-index:35;background:rgba(8,20,15,.55);display:flex;align-items:center;justify-content:center;padding:20px 16px}
+#askSale .ask-box{background:var(--surface);color:var(--fg);width:100%;max-width:400px;border-radius:16px;padding:20px 18px 14px;box-shadow:0 18px 50px rgba(0,0,0,.3);text-align:center}
+@media (prefers-reduced-motion:no-preference){#askSale .ask-box{animation:up .16s ease-out}}
+#askSale h3{margin:0 0 6px;font-size:18px}
+#askSale .ask-amt{font-size:26px;font-weight:800;color:var(--accent);margin:2px 0 8px}
+#askSale .note{margin:0 0 14px;line-height:1.9}
+#askSale .ask-btns{display:grid;gap:8px}
+#askSale .ask-btns .btn{width:100%;min-height:46px;font-size:16px}
+#askSale .ask-back{margin-top:10px;background:none;border:0;color:var(--muted);font:inherit;font-size:14px;padding:6px 10px;cursor:pointer}
