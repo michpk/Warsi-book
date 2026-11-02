@@ -541,3 +541,6 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 #askSale .ask-back{margin-top:10px;background:none;border:0;color:var(--muted);font:inherit;font-size:14px;padding:6px 10px;cursor:pointer}
 .ret-box{margin-top:10px;border:1px dashed var(--accent);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--accent-2)}
 .ret-box .ret-h{border-bottom:1px solid var(--line);padding:2px 0}
+.disc-box{border:1px dashed var(--line);border-radius:10px;padding:8px 10px;margin-top:4px}
+.disc-box .note .btn{margin-top:6px;margin-inline-start:4px}
+.disc-box small{color:var(--muted)}

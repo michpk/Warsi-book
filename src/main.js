@@ -767,7 +767,7 @@ function askSale(amount,text){
 }
 /* what a customer's "got" entry is: a real payment, goods returned, or money let off (discount).
    Returns and discounts lower the balance only — they are not sale and no cash came into the till. */
-const GOT_KINDS=[["pay","ادائیگی (رقم ملی)"],["ret","مال واپسی"],["disc","ڈسکاؤنٹ / چھوٹ"]];
+const GOT_KINDS=[["pay","ادائیگی (رقم ملی)"],["ret","مال واپسی"]];
 const GK_LABEL={ret:"مال واپسی",disc:"ڈسکاؤنٹ / چھوٹ"};
 const GK_HINT={ret:"گاہک نے مال واپس کیا۔ نیچے چیز چنیں تو وہ اسٹاک میں واپس جڑ جائے گی۔ کھاتے سے رقم کم ہوگی، لیکن یہ نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔",disc:"گاہک کو اتنی رقم چھوڑ دی گئی (کھاتہ برابر کرنے کے لیے)۔ کھاتے سے کم ہوگی، لیکن نہ سیل میں گنی جائے گی نہ گلّے کے کیش میں۔"};
 /* not real money in: a return or a discount */
@@ -779,6 +779,14 @@ function renderRet(){
     +`<p class="note" style="margin:6px 0 0">کل: <b class="num">${fmt(retTotal())}</b> — یہی رقم کھاتے سے کم ہوگی (اوپر بدل بھی سکتے ہیں)</p>`:`<p class="note" style="margin:6px 0 0">چیز نہ چنیں تو صرف رقم کھاتے سے کم ہوگی، اسٹاک نہیں بدلے گا۔</p>`;
 }
 const retTotal=()=>Math.round((S.retLines||[]).reduce((a,l)=>a+(Number(l.qty)||0)*(Number(l.price)||0),0)*100)/100;
+/* receipt + discount: show what the ledger will be left with, offer "let the rest off" */
+function syncDisc(){
+  const i=$("#eDisc"),h=$("#eDiscHint");if(!i||!h)return;const bal=Number(i.dataset.bal)||0,amt=num(($("#eAmt")||{}).value),dc=num(i.value);
+  const left=Math.round((bal-amt-dc)*100)/100,rest=Math.round((bal-amt)*100)/100;
+  h.innerHTML=(bal>0?`کھاتے میں باقی: <b class="num">${fmt(bal)}</b>`:"")+(amt||dc?` · وصولی <b class="num">${fmt(amt)}</b>${dc?` + چھوٹ <b class="num">${fmt(dc)}</b>`:""} → ${left===0?`<b class="c-pay">کھاتہ صفر</b>`:left>0?`باقی رہیں گے <b class="num">${fmt(left)}</b>`:`گاہک کے <b class="num">${fmt(-left)}</b> زیادہ (دینے ہوں گے)`}`:"")
+    +(bal>0&&amt>0&&rest>0&&rest!==dc?` <button type="button" class="btn sm" data-discrest="${rest}">باقی ${fmt(rest)} چھوٹ کر دیں</button>`:"")
+    +(dc?`<br><small>سیل اور گلّے میں صرف وصولی کی رقم ${fmt(amt)} جائے گی، چھوٹ نہیں۔</small>`:"");
+}
 function syncRetAmt(){const a=$("#eAmt");if(a&&(S.retLines||[]).length)a.value=String(retTotal())}
 function srcChoiceHtml(type){
   const sup=(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier";
@@ -795,7 +803,10 @@ function srcChoiceHtml(type){
       <input id="retPick" list="retItemList" placeholder="چیز کا نام لکھ کر چنیں یا بارکوڈ لکھیں" autocomplete="off">
       <datalist id="retItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${esc(it.unit||"")} · Rs ${fq(it.sale)}</option>`).join("")}</datalist>
       <div id="retLines"></div></div></div>`:"";
-  return gk+`<div class="fld" id="eSrcBox"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
+  const bal=k==="rec"?(balances()[S.openCust]||0):0;
+  const disc=k==="rec"?`<div class="disc-box" id="eDiscBox"><div class="fld"><label for="eDisc">ڈسکاؤنٹ / چھوٹ (اختیاری)</label><input id="eDisc" name="disc" class="num" inputmode="decimal" placeholder="0" data-bal="${bal}"></div>
+    <p class="note" id="eDiscHint" style="margin:4px 0 0">${bal>0?`کھاتے میں باقی: <b class="num">${fmt(bal)}</b>`:""}</p></div>`:"";
+  return gk+disc+`<div class="fld" id="eSrcBox"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
     <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
     <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
 }
@@ -1186,6 +1197,7 @@ document.addEventListener("submit",async ev=>{
     await w(()=>{db.update(col,id,{date:nd});
       if(col==="expenses")for(const e of S.entries.filter(e=>e.exp===id))db.update("entries",e.id,{date:withDate(e.date,d.date)});
       if(col==="entries")for(const x of S.expenses.filter(x=>x.payFor===id))db.update("expenses",x.id,{date:withDate(x.date,d.date)});
+      if(col==="entries")for(const x of S.entries.filter(x=>x.discFor===id))db.update("entries",x.id,{date:withDate(x.date,d.date)});
       if(col==="expenses")for(const e of S.expenses.filter(e=>e.ownFor===id||e.saleFor===id))db.update("expenses",e.id,{date:withDate(e.date,d.date)});});
     toast("تاریخ بدل گئی: "+new Date(nd).toLocaleDateString("en-GB"));
     if(col==="entries")sheetEntryView(id);else sheetExpView(id);
@@ -1193,11 +1205,12 @@ document.addEventListener("submit",async ev=>{
   }
   if(kind==="entry"){
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
-    if(amt<=0){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
+    const dc=(!d.gk||d.gk==="pay")?num(d.disc):0;
+    if(amt<=0&&!(dc>0)){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
     const att=savePhotos({kind:"entry",cust:S.openCust}),eid=newId("entries");
     const gk=d.gk&&d.gk!=="pay"?d.gk:"";
-    const src=gk?"":d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
+    const src=gk||amt<=0?"":d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
     const nm=(c&&c.name)||"";
     // money in from a customer, or a supplier paid out of the till's sale: ask whether it goes into the sale
     let inSale=null;
@@ -1211,11 +1224,14 @@ document.addEventListener("submit",async ev=>{
     const rb=(c&&c.branch&&S.branches.some(b=>b.id===c.branch))?c.branch:defBranch();
     const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...(rl.length?{lines:rl,stockBranch:rb}:{}),...by()}}];
     for(const l of rl)ops.push({op:"stock",id:l.item,branch:rb,delta:l.qty});
+    if(dc>0){const dnote="ڈسکاؤنٹ / چھوٹ"+(amt>0?" (وصولی "+fmt(amt)+" کے ساتھ)":"")+(d.note.trim()?" · "+d.note.trim():"");
+      const de={op:"set",col:"entries",id:newId("entries"),data:{cust:S.openCust,type:"got",amount:dc,gk:"disc",att:[],note:dnote,date:dt+1,branch:c?c.branch:"",...(amt>0?{discFor:eid}:{}),...by()}};
+      if(amt>0)ops.push(de);else{de.data.att=att;ops.splice(0,1,de)}}
     if(src==="till"&&inSale)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
-    if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
+    if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":dc>0?"وصولی اور چھوٹ محفوظ":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
   }
   if(kind==="item"){
     const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,buyCost=num(d.cost);
@@ -1343,7 +1359,7 @@ document.addEventListener("click",async ev=>{
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
   if(ds.gk){const i=$("#eGk");if(i){i.value=ds.gk;document.querySelectorAll("#eGkSeg [data-gk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.gk===ds.gk));
-    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";const rb=$("#retBox");if(rb){rb.hidden=ds.gk!=="ret";if(ds.gk==="ret")renderRet()}
+    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";const db0=$("#eDiscBox");if(db0)db0.hidden=ds.gk!=="pay";const rb=$("#retBox");if(rb){rb.hidden=ds.gk!=="ret";if(ds.gk==="ret")renderRet()}
     const lb=document.querySelector('label[for="eAmt"]');if(lb)lb.textContent=ds.gk==="ret"?"کتنے کا مال واپس آیا":ds.gk==="disc"?"کتنی رقم چھوڑی":"کتنی رقم ملی"}return}
   if(ds.src){const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
@@ -1408,12 +1424,13 @@ document.addEventListener("click",async ev=>{
   if(ds.edititem){sheetItemForm(S.items.find(c=>c.id===ds.edititem));return}
   if(ds.editbranch){sheetBranch(S.branches.find(c=>c.id===ds.editbranch));return}
   if(ds.setbranch){S.branch=ds.setbranch;try{localStorage.setItem("hk_branch",S.branch)}catch(e){};S.tab="home";render();return}
+  if(ds.discrest){const i=$("#eDisc");if(i){i.value=ds.discrest;syncDisc()}return}
   if(ds.rrm!==undefined){S.retLines.splice(+ds.rrm,1);renderRet();syncRetAmt();return}
   if(ds.entry){S.photos=[];S.retLines=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
   if(ds.delentry){const box=$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=`<div class="confirm">یہ اندراج حذف کریں؟<button class="btn owe sm" data-delyes="${esc(ds.delentry)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
   if(ds.delyes){const id=ds.delyes,de=S.entries.find(x=>x.id===id);if(await w(()=>{db.remove("entries",id);
-    if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
+    if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id);for(const x of S.entries.filter(x=>x.discFor===id))db.remove("entries",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
   if("delno" in ds){t.closest(".confirm").remove();return}
   if(ds.rm){S.cart.splice(+ds.rm,1);render();return}
   if(ds.copybill){const s=S.sales.find(x=>x.id===ds.copybill);const txt=`بل #${s.no}\n${new Date(s.date).toLocaleString("en-GB")}\n${s.custName||"نقد گاہک"}\n`+(s.lines||[]).map(l=>`${l.name}  ${fq(l.qty)} × ${fq(l.price)} = ${fq(l.qty*l.price)}`).join("\n")+`\nکل: ${fmt(s.total)}\nنقد: ${fmt(s.paid)}`+(s.total>s.paid?`\nادھار: ${fmt(s.total-s.paid)}`:"");
@@ -1455,6 +1472,7 @@ document.addEventListener("input",e=>{
   const t=e.target;
   if(t.id==="q"){S.q=t.value;const pos=t.selectionStart;render();const n=$("#q");n.focus();n.setSelectionRange(pos,pos)}
   if(t.id==="sq"){S.stockQ=t.value;const pos=t.selectionStart;render();const n=$("#sq");n.focus();n.setSelectionRange(pos,pos)}
+  if(t.id==="eDisc"||t.id==="eAmt")syncDisc();
   if(t.dataset.rq!==undefined||t.dataset.rp!==undefined){const l=S.retLines[+(t.dataset.rq??t.dataset.rp)];if(l){l[t.dataset.rq!==undefined?"qty":"price"]=num(t.value);syncRetAmt();const tt=document.querySelector("#retLines b.num");if(tt)tt.textContent=fmt(retTotal())}}
   if(t.dataset.cq!==undefined){S.cart[+t.dataset.cq].qty=num(t.value);updTotal()}
   if(t.dataset.cp!==undefined){S.cart[+t.dataset.cp].price=num(t.value);updTotal()}
