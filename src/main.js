@@ -750,6 +750,39 @@ function sheetCust(id){
 }
 /* where the money came from / went: decides the till and the daily sale */
 function srcPref(k,d){try{return localStorage.getItem("wb_src_"+k)||d}catch(e){return d}}
+/* ---------- delete: this one, or everything linked to it ----------
+   Links: a supplier payment ↔ its till-sale income (payFor), a receipt ↔ its discount (discFor),
+   an expense ↔ its supplier-ledger lines (exp) and its own-pocket / till-sale incomes (ownFor, saleFor). */
+function linkedRecs(col,id){
+  const seen=new Set([col+":"+id]),out=[],q=[[col,id]];
+  const add=(c,i)=>{const k=c+":"+i;if(seen.has(k))return;if(!S[c].some(v=>v.id===i))return;seen.add(k);out.push([c,i]);q.push([c,i])};
+  while(q.length){const [c,i]=q.shift();
+    if(c==="entries"){const e=S.entries.find(v=>v.id===i);if(!e)continue;
+      for(const x of S.expenses)if(x.payFor===i)add("expenses",x.id);
+      for(const x of S.entries)if(x.discFor===i)add("entries",x.id);
+      if(e.discFor)add("entries",e.discFor);if(e.exp)add("expenses",e.exp)}
+    else{const x=S.expenses.find(v=>v.id===i);if(!x)continue;
+      for(const e of S.entries)if(e.exp===i)add("entries",e.id);
+      for(const v of S.expenses)if(v.ownFor===i||v.saleFor===i)add("expenses",v.id);
+      if(x.payFor)add("entries",x.payFor);if(x.saleFor)add("expenses",x.saleFor);if(x.ownFor)add("expenses",x.ownFor)}}
+  return out;
+}
+function recLabel(c,i){
+  if(c==="entries"){const e=S.entries.find(v=>v.id===i)||{},cu=S.customers.find(v=>v.id===e.cust)||{};return `${cu.kind==="supplier"?"سپلائر":"گاہک"} کا کھاتہ (${esc(cu.name||"")}): ${esc(e.note||(e.type==="gave"?"دیے":"ملے"))} · ${fmt(e.amount)}`}
+  const x=S.expenses.find(v=>v.id===i)||{};return `روزنامچہ ${x.dir==="in"?"آمد":"خرچہ"}: ${esc(x.note||expCat(x))} · ${fmt(x.amount)}`;
+}
+function delConfirmHtml(col,id,what){
+  const L=linkedRecs(col,id);
+  return `<div class="confirm del-confirm"><b>${what} حذف کریں؟</b>
+    ${L.length?`<label class="del-all"><input type="checkbox" data-delall> <span>ہر جگہ سے حذف کریں — اس سے جڑے ${L.length} اندراج بھی ساتھ حذف ہوں گے:</span></label><ul class="del-list">${L.map(([c,i])=>`<li>${recLabel(c,i)}</li>`).join("")}</ul>`:""}
+    <div class="del-btns"><button class="btn owe sm" data-delrec="${col}:${esc(id)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div></div>`;
+}
+async function deleteRecs(list){
+  const ops=[];
+  for(const [c,i] of list){const r=S[c].find(v=>v.id===i);if(!r)continue;ops.push({op:"update",col:c,id:i,data:{del:true}});
+    if(c==="entries"&&r.gk==="ret")for(const l of r.lines||[])if(S.items.some(x=>x.id===l.item))ops.push({op:"stock",id:l.item,branch:r.stockBranch||r.branch||defBranch(),delta:-l.qty});}
+  return w(()=>db.batch(ops));
+}
 /* ---------- "paid out of the till's sale": one switch, wherever it is changed ----------
    A supplier payment from the till (entry src:"till") or the till part of an expense may also be added to the
    day's sale. That is an income row linked to it (payFor = entry, saleFor = expense). The same switch shows in the
@@ -1073,6 +1106,7 @@ function sheetEntryView(id){
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
     ${e.exp&&S.expenses.some(x=>x.id===e.exp)?`<div class="actions" style="margin-top:12px">${S.isAdmin?`<button type="button" class="btn sm primary" data-expedit="${esc(e.exp)}">✎ اس خرچے میں ترمیم کریں</button>`:""}<button type="button" class="btn sm" data-expv-btn="${esc(e.exp)}">روزنامچہ والا خرچہ دیکھیں</button></div>`:""}
     ${dateEditHtml("entries",e)}
+    ${S.isAdmin&&!e.sale&&!e.purchase?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delentry="${esc(e.id)}">یہ اندراج حذف کریں</button></div><div id="del_${esc(e.id)}"></div>`:""}
     <div class="actions" style="margin-top:14px">${e.sale&&S.sales.some(x=>x.id===e.sale)?`<button class="btn primary" data-salev="${esc(e.sale)}">${PDF_ICON} بل کھولیں (QR / PDF / پرنٹ)</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?`<button class="btn primary" data-purv="${esc(e.purchase)}">${PDF_ICON} بل کھولیں</button>`:""}<button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
   for(const a of att)loadAtt(a);
 }
@@ -1444,7 +1478,10 @@ document.addEventListener("click",async ev=>{
   if(ds.purv){sheetPurchase(ds.purv);return}
   if(ds.prm){S.pcart.splice(+ds.prm,1);render();return}
   if(ds.pickc){fillContact(S.contacts[+ds.pickc]);return}
-  if(ds.delexp){const box=$("#dx_"+CSS.escape(ds.delexp));if(box)box.innerHTML=`<div class="confirm">یہ خرچہ حذف کریں؟<button class="btn owe sm" data-delexpyes="${esc(ds.delexp)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
+  if(ds.delexp){const box=$("#dx_"+CSS.escape(ds.delexp)),x=S.expenses.find(v=>v.id===ds.delexp);if(box)box.innerHTML=delConfirmHtml("expenses",ds.delexp,x&&x.dir==="in"?"یہ آمد":"یہ خرچہ");return}
+  if(ds.delrec){const [c,id]=ds.delrec.split(":"),all=t.closest(".confirm").querySelector("[data-delall]"),list=[[c,id],...(all&&all.checked?linkedRecs(c,id):[])];
+    const cust=S.openCust,inLedger=!!t.closest(".led-row");
+    if(await deleteRecs(list)){toast(list.length>1?`حذف ہو گیا · ${list.length} اندراج، ہر جگہ سے`:"حذف ہو گیا");if(inLedger&&cust)sheetCust(cust);else closeSheet()}return}
   if(ds.delexpyes){const id=ds.delexpyes;if(await w(()=>db.remove("expenses",id))){for(const e of S.entries.filter(e=>e.exp===id))db.remove("entries",e.id);for(const x of S.expenses.filter(x=>x.ownFor===id||x.saleFor===id))db.remove("expenses",x.id);closeSheet();toast("حذف ہو گیا")}return}
   if(ds.cust){sheetCust(ds.cust);return}
   if(ds.item){sheetItem(ds.item);return}
@@ -1458,7 +1495,7 @@ document.addEventListener("click",async ev=>{
   if(ds.rrm!==undefined){S.retLines.splice(+ds.rrm,1);renderRet();syncRetAmt();return}
   if(ds.entry){S.photos=[];S.retLines=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
-  if(ds.delentry){const box=$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=`<div class="confirm">یہ اندراج حذف کریں؟<button class="btn owe sm" data-delyes="${esc(ds.delentry)}">ہاں، حذف</button><button class="btn sm" data-delno>نہیں</button></div>`;return}
+  if(ds.delentry){const box=document.querySelector("#sheet #del_"+CSS.escape(ds.delentry))||$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=delConfirmHtml("entries",ds.delentry,"یہ اندراج");return}
   if(ds.delyes){const id=ds.delyes,de=S.entries.find(x=>x.id===id);if(await w(()=>{db.remove("entries",id);
     if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id);for(const x of S.entries.filter(x=>x.discFor===id))db.remove("entries",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
   if("delno" in ds){t.closest(".confirm").remove();return}
@@ -1491,7 +1528,7 @@ document.addEventListener("pointermove",e=>{
   const r=wrap.getBoundingClientRect();tip.textContent=g.dataset.tip;tip.style.left=(e.clientX-r.left+wrap.scrollLeft)+"px";tip.style.top=(e.clientY-r.top)+"px";tip.hidden=false;
   const b=g.querySelector(".bar");if(b)b.classList.add("on");
 });
-document.addEventListener("click",e=>{if(e.target.closest("button"))return;const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
+document.addEventListener("click",e=>{if(e.target.closest("button,input,label,.confirm"))return;const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.closest){const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv)}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 document.addEventListener("click",e=>{const i=e.target.closest('input[type="date"]');if(i&&i.showPicker){try{i.showPicker()}catch(x){}}});
