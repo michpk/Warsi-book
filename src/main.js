@@ -68,9 +68,9 @@ function cashFlow(from,to){
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
   for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp||e.src==="bank")continue;const c=ck(e.cust),sup=c.kind==="supplier";
     if(!sup&&e.type==="got"&&!noMoney(e))inR.push({date:e.date,amt:e.amount,noTill:e.inSale===false,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")+(e.inSale===false?" — پہلے ہی گلّے کی سیل میں گنی جا چکی، دوبارہ نہیں جڑی":"")});
-    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
+    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,ent:e.id,tag:e.src==="till"?tillTag("e",e.id):"",label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,tag:tillTag("x",x.id),label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
@@ -281,7 +281,7 @@ function vCash(){
   const d=S.cashDate||todayStr(),from=new Date(d+"T00:00:00").getTime(),to=from+864e5;
   const prev=cashFlow(0,from),open=sumA(prev.inR)-sumA(prev.out);
   const {inR,out}=cashFlow(from,to),tin=sumA(inR),tout=sumA(out);
-  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp?" clickable":""}${r.noTill?" no-till":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
+  const rowsOf=(a,cls)=>a.sort((x,y)=>x.date-y.date).map(r=>`<div class="led-row${r.exp||r.ent?" clickable":""}${r.noTill?" no-till":""}" style="grid-template-columns:minmax(0,1fr) 100px" ${r.exp?`data-expv="${esc(r.exp)}" role="button" tabindex="0"`:r.ent?`data-entv="${esc(r.ent)}" role="button" tabindex="0"`:""}><div style="min-width:0"><div>${esc(r.label)}${r.tag||""}${r.att?` <span class="pill clip">${CLIP_ICON} ${r.att}</span>`:""}</div><div class="meta"><span class="num">${new Date(r.date).toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}</span></div></div><span class="n ${cls}">${fq(r.amt)}</span></div>`).join("");
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
   <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" dir="ltr" value="${d}" max="${todayStr()}"></label>
@@ -740,7 +740,7 @@ function sheetCust(id){
    ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
-   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
+   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}${c.kind==="supplier"&&e.type==="gave"?tillTag("e",e.id):""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
@@ -750,6 +750,35 @@ function sheetCust(id){
 }
 /* where the money came from / went: decides the till and the daily sale */
 function srcPref(k,d){try{return localStorage.getItem("wb_src_"+k)||d}catch(e){return d}}
+/* ---------- "paid out of the till's sale": one switch, wherever it is changed ----------
+   A supplier payment from the till (entry src:"till") or the till part of an expense may also be added to the
+   day's sale. That is an income row linked to it (payFor = entry, saleFor = expense). The same switch shows in the
+   supplier's ledger, in the روزنامچہ and in the entry / expense windows, and they all change the same data. */
+function tillOf(kind,id){
+  if(kind==="e"){const e=S.entries.find(x=>x.id===id);if(!e)return null;
+    if(e.exp)return tillOf("x",e.exp);
+    const c=S.customers.find(x=>x.id===e.cust)||{};if(c.kind!=="supplier"||e.type!=="gave"||e.src!=="till")return null;
+    return {kind:"e",id,amt:Number(e.amount)||0,inc:S.expenses.find(x=>x.payFor===id),name:c.name||"",date:e.date,branch:e.branch||""}}
+  const x=S.expenses.find(v=>v.id===id);if(!x)return null;
+  if(x.dir==="in"){if(x.payFor)return tillOf("e",x.payFor);if(x.saleFor)return tillOf("x",x.saleFor);return null}
+  const amt=Math.max(0,(x.paid!=null?Number(x.paid):Number(x.amount))-(Number(x.own)||0));if(!(amt>0))return null;
+  return {kind:"x",id,amt,inc:S.expenses.find(v=>v.saleFor===id),name:x.suppName||"",cat:expCat(x),date:x.date,branch:x.branch||""};
+}
+async function setTillSale(kind,id,on){
+  const t=tillOf(kind,id);if(!t)return false;const ops=[];
+  if(on&&!t.inc){const nid=newId("expenses");
+    ops.push({op:"set",col:"expenses",id:nid,data:t.kind==="e"?{amount:t.amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+t.name,date:t.date-1,branch:t.branch,payFor:t.id,...by()}
+      :{amount:t.amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · "+t.cat+(t.name?" ("+t.name+")":"")+" کو ادا کی",date:t.date-2,branch:t.branch,saleFor:t.id,...by()}})}
+  if(!on&&t.inc)ops.push({op:"update",col:"expenses",id:t.inc.id,data:{del:true}});
+  ops.push(t.kind==="e"?{op:"update",col:"entries",id:t.id,data:{inSale:!!on}}:{op:"update",col:"expenses",id:t.id,data:{tillSale:on?t.amt:0}});
+  return w(()=>db.batch(ops));
+}
+/* the switch, and a short tag for lists */
+function tillSaleHtml(kind,id){
+  const t=tillOf(kind,id);if(!t)return "";const on=!!t.inc;
+  return `<label class="sale-toggle till-tog"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-tilltog="${t.kind}:${esc(t.id)}" ${on?"checked":""}> <span><b>گلّے کی سیل سے دیے گئے ${fmt(t.amt)} — سیل میں شامل</b><small>${on?"یہ رقم آج کی سیل میں جڑی ہے۔ ٹک ہٹائیں اگر اس سیل کا بل پہلے بن چکا تھا۔":"یہ رقم سیل میں شامل نہیں (بل پہلے بن چکا تھا)۔ ٹک لگائیں تو سیل میں جڑ جائے گی۔"} یہ بدلنے سے سپلائر کا کھاتہ، روزنامچہ اور روزانہ سیل ایک ساتھ اپڈیٹ ہوتے ہیں۔</small></span></label>`;
+}
+const tillTag=(kind,id)=>{const t=tillOf(kind,id);return t?(t.inc?` <span class="pill pay">سیل میں شامل</span>`:` <span class="pill">سیل میں شامل نہیں</span>`):""};
 /* on save: "should this money go into the sale?"  resolves true (yes) / false (no) / null (go back) */
 function askSale(amount,text){
   return new Promise(res=>{
@@ -998,17 +1027,17 @@ function savePhotos(meta){
   S.photos=[];return ids;
 }
 function sheetExpView(id){
-  const x=S.expenses.find(e=>e.id===id);if(!x)return;const inc=x.dir==="in",att=x.att||[];
+  const x=S.expenses.find(e=>e.id===id);if(!x)return;const inc=x.dir==="in",att=x.att||[];S.view={col:"expenses",id};
   openSheet(inc?"آمد کی تفصیل":"خرچے کی تفصیل",`
     <div class="bal-box ${inc?"pay":"owe"}"><div><div class="note">${esc(expCat(x))}</div><div class="v ${inc?"c-pay":"c-owe"}">${fmt(x.amount)}</div></div><div class="note"><span class="num">${dstr(x.date)}</span><br>${esc(branchName(x.branch))}${x.byName?" · "+esc(x.byName):""}</div></div>
     ${String(x.note||"").includes(" · ")?`<p style="margin:10px 0 0">${esc(String(x.note).split(" · ").slice(1).join(" · "))}</p>`:""}
     ${x.suppName?`<div class="qr-row" style="margin-top:10px"><div><b>سپلائر: ${esc(x.suppName)}</b><div class="note">${x.paid!=null&&x.paid<x.amount?`نقد ${fmt(x.paid)} · ادھار ${fmt(x.amount-x.paid)} (سپلائر کے کھاتے میں)`:"پوری رقم نقد دی گئی"}</div>${x.supp?`<button class="btn sm" data-cust="${esc(x.supp)}">سپلائر کا کھاتہ کھولیں</button>`:""}</div></div>`:""}
     ${x.own?`<p class="note">اس میں سے <b>${fmt(x.own)}</b> اپنی جیب سے دیے گئے (مالک نے رقم ڈالی)۔</p>`:""}
     ${x.ownFor?`<p class="note">یہ رقم ایک خرچے کے لیے اپنی جیب سے ڈالی گئی تھی۔</p>`:""}
-    ${x.tillSale?`<p class="note">اس میں سے <b>${fmt(x.tillSale)}</b> گلّے کی سیل سے دیے گئے، اور یہ رقم آج کی فروخت میں شمار ہوئی۔</p>`:""}
-    ${x.saleFor?`<p class="note">یہ رقم گلّے کی سیل سے ایک خرچے کی ادائیگی میں گئی، اس لیے فروخت میں شمار ہوئی۔</p>`:""}
+    ${x.payFor||x.saleFor?`<p class="note">یہ رقم گلّے کی سیل سے ${x.payFor?"سپلائر کو ادائیگی":"ایک خرچے"} میں گئی، اس لیے سیل میں شامل ہے۔ ${(()=>{const t=tillOf("x",x.id);if(!t)return "";const e=t.kind==="e"&&S.entries.find(v=>v.id===t.id);return e?`<button class="btn sm" data-entv-btn="${esc(e.id)}">سپلائر والی ادائیگی کھولیں</button>`:`<button class="btn sm" data-expv-btn="${esc(t.id)}">خرچہ کھولیں</button>`})()}</p>`:""}
+    ${tillSaleHtml("x",x.id)}
     ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
-    ${inc?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
+    ${inc&&!x.payFor&&!x.saleFor?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
@@ -1033,9 +1062,10 @@ async function ledgerPhoto(entId,file){
 function sheetEntryView(id){
   const e=S.entries.find(x=>x.id===id);if(!e)return;const c=S.customers.find(x=>x.id===e.cust)||{},sup=c.kind==="supplier",att=e.att||[];
   const label=e.note||(sup?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی"));
-  S.openCust=null;
+  S.openCust=null;S.view={col:"entries",id};
   openSheet(c.name||"اندراج",`
     <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
+    ${tillSaleHtml("e",e.id)}
     ${(e.lines||[]).length?`<h4 style="margin:14px 0 8px;font-size:14px">واپس آیا مال (اسٹاک میں جڑ چکا)</h4><div class="list">${e.lines.map(l=>`<div class="row" style="cursor:default"><div class="main"><div class="t">${esc(l.name)}</div><div class="s"><span class="num">${fq(l.qty)}</span> ${esc(l.unit||"")} × Rs <span class="num">${fq(l.price)}</span></div></div><div class="amt"><div class="v">${fmt(l.qty*l.price)}</div></div></div>`).join("")}</div>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
@@ -1507,6 +1537,11 @@ document.addEventListener("change",e=>{
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
   if(t.dataset.bf&&t.tagName==="SELECT"){const [i,f]=t.dataset.bf.split(":");S.bulk[+i][f]=t.value}
+  if(t.dataset.tilltog){const [k,id]=t.dataset.tilltog.split(":"),vw=S.view||{},viewId=vw.id;
+    setTillSale(k,id,t.checked).then(ok=>{if(!ok){t.checked=!t.checked;return}toast(t.checked?"سیل میں شامل کر دی":"سیل سے نکال دی");
+      // stay on the window that was open; if it was the income row that just got removed, show the payment instead
+      const isEnt=vw.col==="entries";
+      if(viewId&&(isEnt?S.entries:S.expenses).some(v=>v.id===viewId))isEnt?sheetEntryView(viewId):sheetExpView(viewId);else k==="e"?sheetEntryView(id):sheetExpView(id)})}
   if(t.dataset.togsale){const id=t.dataset.togsale;w(()=>db.update("expenses",id,{sale:t.checked})).then(ok=>{if(ok){toast(t.checked?"فروخت میں شمار ہو گئی":"فروخت سے نکال دی");sheetExpView(id)}})}
   if(t.dataset.unitsel||t.id==="iDiff")syncItemForm();
   if(t.id==="saleLedger"){S.saleLedger=t.checked;updTotal()}
