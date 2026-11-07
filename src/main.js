@@ -63,6 +63,26 @@ const sumA=a=>a.reduce((x,y)=>x+(y.noTill?0:Number(y.amt)||0),0);
 /* money the owner puts in (by hand, or the "own pocket" part of an expense) is earlier sales money he had
    taken home, so it is not added to the till again */
 const OWNER_IN="مالک نے رقم ڈالی";
+/* latest ledger entries, with linked pairs shown once: an expense / bill / purchase writes two lines
+   (goods + cash paid) and a receipt with a discount writes two — here they become one row */
+function recentEntries(n){
+  const groups=new Map();
+  for(const e of [...S.entries].filter(inBranch).sort((a,b)=>b.date-a.date)){
+    const k=e.exp?"x"+e.exp:e.sale?"s"+e.sale:e.purchase?"p"+e.purchase:e.discFor?"e"+e.discFor:"e"+e.id;
+    if(!groups.has(k)){if(groups.size>=n)continue;groups.set(k,[])}
+    groups.get(k).push(e);
+  }
+  return [...groups.values()].map(g=>{
+    if(g.length<2)return g[0];
+    const gave=g.filter(e=>e.type==="gave").reduce((a,e)=>a+(Number(e.amount)||0),0),got=g.filter(e=>e.type==="got").reduce((a,e)=>a+(Number(e.amount)||0),0);
+    const top=g.reduce((a,e)=>e.date>a.date?e:a,g[0]);
+    if(g[0].exp||g[0].purchase){const m=g.find(e=>e.type==="got")||g[0],note=String(m.note||"").replace(/^خرچہ: /,"خرچہ · ");
+      return gave>=got?{...m,date:top.date,type:"gave",amount:got,note:note+" (نقد ادا)"}:{...m,date:top.date,note:note+` · نقد ${fq(gave)} · ادھار ${fq(got-gave)}`}}
+    if(g[0].sale){const m=g.find(e=>e.type==="gave")||g[0];return {...m,date:top.date,amount:gave,note:(m.note||"")+(got?` · نقد ${fq(got)}${gave>got?` · ادھار ${fq(gave-got)}`:""}`:"")}}
+    const m=g.find(e=>!e.discFor)||g[0],d=g.filter(e=>e.discFor).reduce((a,e)=>a+(Number(e.amount)||0),0);
+    return {...m,note:(m.note||"رقم ملی")+` + چھوٹ ${fq(d)}`};
+  });
+}
 function cashFlow(from,to){
   const inR=[],out=[],ck=id=>S.customers.find(c=>c.id===id)||{};
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
@@ -126,7 +146,7 @@ function vHome(){
   const expToday=sum(S.expenses.filter(x=>inBranch(x)&&x.dir!=="in"&&x.date>=t0&&x.date<t0+D),x=>x.amount);
   const profit=sum(month,s=>sum(s.lines||[],l=>(l.price-(l.cost||0))*l.qty));
   const low=S.items.filter(it=>{const q=stockOf(it,S.branch);return (Number(it.min)||0)>0&&q<=Number(it.min)}).slice(0,8);
-  const recent=[...S.entries].filter(inBranch).sort((a,b)=>b.date-a.date).slice(0,8);
+  const recent=recentEntries(8);
   const cname=id=>(S.customers.find(c=>c.id===id)||{}).name||"—";
   const cs=cashSales(t0,t0+D),saleT=cs.total,monthSale=cashSales(m0,t0+D).total;
   // last 7 days of sales, oldest first
