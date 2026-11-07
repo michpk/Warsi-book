@@ -190,7 +190,9 @@ function vKhata(){
   const bal=balances(),q=S.q.trim().toLowerCase();
   let list=S.customers.filter(c=>inBranch(c)&&(c.kind||"customer")===S.kind);
   if(q)list=list.filter(c=>(c.name||"").toLowerCase().includes(q)||(c.phone||"").includes(q));
-  list.sort((a,b)=>Math.abs(bal[b.id]||0)-Math.abs(bal[a.id]||0));
+  // the ledger with the latest entry comes first (a new / back-dated entry counts from when it was made)
+  const lastAct={};for(const e of S.entries){const t=Math.max(Number(e.date)||0,e.u&&typeof e.u.toMillis==="function"?e.u.toMillis():0);if(t>(lastAct[e.cust]||0))lastAct[e.cust]=t}
+  list.sort((a,b)=>(lastAct[b.id]||b.createdAt||0)-(lastAct[a.id]||a.createdAt||0));
   let recv=0,payb=0;for(const c of list){const v=bal[c.id]||0;if(v>0)recv+=v;else payb-=v}
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">کھاتے</h2><div class="spacer"></div>${S.canWrite?`<button class="btn" data-act="bulk">${XL_ICON} Excel / PDF سے لائیں</button><button class="btn primary" data-act="newCust">+ ${S.kind==="supplier"?"نیا سپلائر":"نیا گاہک"}</button>`:""}</div>
