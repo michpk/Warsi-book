@@ -1,0 +1,10 @@
+{
+  "name": "wb-sms",
+  "version": "1.0.0",
+  "description": "Send SMS straight from the phone's SIM (Warsi Book reminders)",
+  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "peerDependencies": { "@capacitor/core": ">=7.0.0" },
+  "capacitor": { "android": { "src": "android" } }
+}

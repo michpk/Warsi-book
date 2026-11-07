@@ -24,6 +24,7 @@
     "jsqr": "^1.4.0",
     "pdfjs-dist": "^4.10.38",
     "qrcode": "^1.5.4",
+    "wb-sms": "file:plugins/wb-sms",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

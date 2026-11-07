@@ -90,3 +90,11 @@ export function compressImage(file, maxSide = 1400) {
     img.src = url;
   });
 }
+
+// Android app only: send an SMS straight from the phone's SIM (asks for permission the first time).
+export const canDirectSms = isNative && Capacitor.getPlatform() === "android";
+export async function sendSmsDirect(phone, text) {
+  const { WbSms } = await import("wb-sms");
+  const to = String(phone || "").replace(/[^\d+]/g, "");
+  return WbSms.send({ to, text: text.replace(/\*/g, "") });
+}

@@ -2,7 +2,7 @@ import "./style.css";
 import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
 import { initBarcode, scanBtn, itemCodesHtml, collectCodes, codesOf, findCode, sheetCount, sheetLabels, SCAN_ICON } from "./barcode.js";
 import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts } from "./pay.js";
-import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar } from "./native.js";
+import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar, canDirectSms, sendSmsDirect } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
 import { saveBinary } from "./native.js";
@@ -195,6 +195,7 @@ function vKhata(){
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">کھاتے</h2><div class="spacer"></div>${S.canWrite?`<button class="btn" data-act="bulk">${XL_ICON} Excel / PDF سے لائیں</button><button class="btn primary" data-act="newCust">+ ${S.kind==="supplier"?"نیا سپلائر":"نیا گاہک"}</button>`:""}</div>
   <div class="chips"><button class="chip" data-kind="customer" aria-pressed="${S.kind==="customer"}">گاہک</button><button class="chip" data-kind="supplier" aria-pressed="${S.kind==="supplier"}">سپلائر</button></div>
+  ${S.kind==="customer"&&recv>0?`<button class="btn remind-btn" data-act="remind">${WA_ICON}${SMS_ICON}<span>بقایا یاد دہانی — سب گاہکوں کو ایک ساتھ</span></button>`:""}
   <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))">
     <div class="card stat owe"><span class="lbl">آپ کو لینے ہیں</span><span class="val">${fmt(recv)}</span></div>
     <div class="card stat pay"><span class="lbl">آپ نے دینے ہیں</span><span class="val">${fmt(payb)}</span></div>
@@ -285,7 +286,7 @@ function vCash(){
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
   <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" dir="ltr" value="${d}" max="${todayStr()}"></label>
-    ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button>`:""}</div>
+    ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button><button class="btn owe big sup-pay" data-act="supPay">+ سپلائر کو ادائیگی</button>`:""}</div>
   <div class="stats">
     <div class="card stat"><span class="lbl">پچھلا کیش (حساب سے)</span><span class="val">${fmt(open)}</span></div>
     <div class="card stat pay"><span class="lbl">آج آمد</span><span class="val">${fmt(tin)}</span></div>
@@ -546,7 +547,7 @@ function vBranch(){
 
 /* ---------- sheets ---------- */
 function openSheet(title,body){const sh=$("#sheet");sh.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" dir="rtl" lang="ur"><div class="sheet-h"><h3>${esc(title)}</h3><button class="x" data-close aria-label="بند کریں">×</button></div>${body}</div>`;sh.hidden=false;const f=sh.querySelector("input,select,textarea");if(f)setTimeout(()=>f.focus(),30);fillNames()}
-function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.openItem=null;S.afterCust=null}
+function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.supPay=false;S.openItem=null;S.afterCust=null}
 function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
 const branchOptions=(sel)=>S.branches.map(b=>`<option value="${esc(b.id)}" ${sel===b.id?"selected":""}>${esc(b.name)}</option>`).join("");
 const defBranch=()=>S.branch!=="all"?S.branch:(S.branches[0]||{}).id||"";
@@ -677,6 +678,89 @@ async function busy(btn,fn){if(btn){btn.disabled=true;btn.dataset.lbl=btn.innerH
 
 /* ---------- WhatsApp ---------- */
 const shopLine=()=>S.shopName?"\n— "+S.shopName:"";
+/* ---------- payment reminders: short message, many customers at once ---------- */
+const RM_DEF="السلام علیکم {نام}، آپ کے ذمے {رقم} باقی ہیں۔ {دکان}";
+const RM_ROMAN="AoA {نام}, aap ke zimme {رقم} baqi hain. Shukriya - {دکان}";
+const rmGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:v}catch(e){return d}};
+const rmSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const rmTpl=()=>rmGet("wb_rtpl",RM_DEF),rmWaExtra=()=>rmGet("wb_rwa","1")==="1";
+function rmText(c,v,tpl){return (tpl||rmTpl()).replace(/\{نام\}/g,c.name||"").replace(/\{رقم\}/g,fmt(v)).replace(/\{دکان\}/g,S.shopName||"").replace(/[ \t]+$/,"").trim()}
+/* SMS parts: Urdu (Unicode) 70 letters in one SMS, 67 each when longer; English 160 / 153 */
+function smsParts(t){const uni=/[^\x00-\x7F]/.test(t),n=t.length;return uni?(n<=70?1:Math.ceil(n/67)):(n<=160?1:Math.ceil(n/153))}
+function rmWaText(c,v,photoEnt){return rmText(c,v)+(rmWaExtra()?payText()+photoLinkText(photoEnt):"")}
+function rmCands(){
+  const bal=balances(),lastGot={},min=num(S.rmMin),days=Number(S.rmDays)||0;
+  for(const e of S.entries)if(e.type==="got")lastGot[e.cust]=Math.max(lastGot[e.cust]||0,e.date);
+  return S.customers.filter(c=>inBranch(c)&&(c.kind||"customer")==="customer"&&(bal[c.id]||0)>0.5&&(bal[c.id]||0)>=min&&(!days||!lastGot[c.id]||Date.now()-lastGot[c.id]>=days*864e5))
+    .map(c=>({c,v:bal[c.id],last:lastGot[c.id]||0,ph:String(c.phone||"").replace(/\D/g,"").length>=10})).sort((a,b)=>b.v-a.v);
+}
+const daysAgo=t=>{if(!t)return null;const d=Math.floor((Date.now()-t)/864e5);return d<=0?"آج":d===1?"کل":d+" دن پہلے"};
+function sheetRemind(){
+  if(S.rmMin==null){S.rmMin="";S.rmDays="0"}
+  S.rmSel=new Set(rmCands().filter(x=>x.ph).map(x=>x.c.id));
+  openSheet("بقایا یاد دہانی",`
+    <div class="two"><div class="fld"><label for="rmMin">کم از کم بقایا</label><input id="rmMin" class="num" inputmode="decimal" placeholder="0" value="${esc(S.rmMin)}"></div>
+      <div class="fld"><label for="rmDays">آخری وصولی</label><select id="rmDays">${[["0","سب گاہک"],["7","7 دن سے کچھ نہیں دیا"],["15","15 دن سے"],["30","ایک مہینے سے"],["60","دو مہینے سے"]].map(([v,l])=>`<option value="${v}" ${S.rmDays===v?"selected":""}>${l}</option>`).join("")}</select></div></div>
+    <details class="rm-tpl"><summary>پیغام <span class="note" id="rmTplSum"></span></summary>
+      <textarea id="rmTpl" rows="3">${esc(rmTpl())}</textarea>
+      <div class="chips" style="margin-top:6px">${["{نام}","{رقم}","{دکان}"].map(k=>`<button type="button" class="chip" data-rmins="${k}">${k}</button>`).join("")}<button type="button" class="chip" data-rmpre="def">اردو (چھوٹا)</button><button type="button" class="chip" data-rmpre="roman">رومن اردو</button></div>
+      <p class="note" id="rmPrev" style="margin:6px 0 0"></p>
+      <label class="note" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rmWaExtra" ${rmWaExtra()?"checked":""}> واٹس ایپ پیغام میں ادائیگی کے اکاؤنٹ اور بل کی تصویر کا لنک بھی (SMS میں نہیں جاتے)</label></details>
+    <div class="rm-bar"><label><input type="checkbox" id="rmAll" checked> سب چنیں</label><span class="note" id="rmCount"></span></div>
+    <div id="rmList" class="list rm-list"></div>
+    <div class="rm-actions"><button type="button" class="btn sms" data-rmgo="sms">${SMS_ICON}<span>SMS بھیجیں</span></button><button type="button" class="btn wa" data-rmgo="wa">${WA_ICON}<span>واٹس ایپ (باری باری)</span></button></div>
+    <div id="rmProg"></div>
+    <p class="note" style="margin:8px 0 0">${canDirectSms?"SMS ایک ہی بار میں آپ کی سم سے سب کو چلے جائیں گے (پہلی بار ایپ اجازت مانگے گی)۔":"ویب سائٹ سے SMS خود نہیں جا سکتے، اس لیے باری باری SMS ایپ کھلے گی۔ ایک کلک میں سب کو SMS موبائل ایپ سے جاتے ہیں۔"} واٹس ایپ ہر گاہک کے لیے کھلے گا، آپ "بھیجیں" دبا کر واپس آئیں تو اگلا خود کھل جائے گا۔</p>`);
+  rmRender();
+}
+function rmRender(){
+  const L=rmCands(),box=$("#rmList");if(!box)return;
+  for(const id of [...S.rmSel])if(!L.some(x=>x.c.id===id))S.rmSel.delete(id);
+  box.innerHTML=L.length?L.map(({c,v,last,ph})=>`<label class="row rm-row${ph?"":" off"}"><input type="checkbox" data-rmsel="${esc(c.id)}" ${S.rmSel.has(c.id)?"checked":""} ${ph?"":"disabled"}>
+    <div class="main"><div class="t">${esc(c.name)}</div><div class="s">${ph?`<span class="num">${esc(c.phone)}</span>`:`<span class="c-owe">فون نمبر نہیں</span>`} · آخری وصولی: ${daysAgo(last)||"کبھی نہیں"}${c.remindAt?` · <span class="rm-last">یاد دہانی ${daysAgo(c.remindAt)} (${c.remindVia==="wa"?"واٹس ایپ":"SMS"})</span>`:""}</div></div>
+    <div class="amt"><div class="v c-owe">${fmt(v)}</div><div class="k note rm-st" id="rmst_${esc(c.id)}"></div></div></label>`).join(""):`<div class="empty">اس فلٹر میں کوئی گاہک نہیں جس سے پیسے لینے ہوں۔</div>`;
+  rmSync();
+}
+function rmSync(){
+  const L=rmCands(),sel=L.filter(x=>S.rmSel.has(x.c.id)),tpl=($("#rmTpl")||{}).value||rmTpl();
+  const parts=sel.reduce((a,x)=>a+smsParts(rmText(x.c,x.v,tpl)),0);
+  const cnt=$("#rmCount");if(cnt)cnt.textContent=`${sel.length} گاہک چنے · کل ${fmt(sel.reduce((a,x)=>a+x.v,0))}`;
+  const all=$("#rmAll");if(all){const can=L.filter(x=>x.ph);all.checked=can.length>0&&sel.length===can.length;all.indeterminate=sel.length>0&&sel.length<can.length}
+  const ex=sel[0]||L[0],pv=$("#rmPrev");
+  if(pv){const t=ex?rmText(ex.c,ex.v,tpl):rmText({name:"احمد"},43600,tpl),p=smsParts(t);pv.innerHTML=`نمونہ: «${esc(t)}»<br><b>${t.length}</b> حروف · <b class="${p>1?"c-owe":"c-pay"}">${p} SMS</b> فی گاہک${p>1?` — ایک SMS کے لیے اردو میں 70 حروف سے کم رکھیں`:""}`}
+  const sm=$("#rmTplSum");if(sm)sm.textContent=ex?`(${smsParts(rmText(ex.c,ex.v,tpl))} SMS فی گاہک — بدلنے کے لیے کھولیں)`:"";
+  const bs=document.querySelector('[data-rmgo="sms"] span'),bw=document.querySelector('[data-rmgo="wa"] span');
+  if(bs)bs.textContent=`SMS بھیجیں (${sel.length})${parts>sel.length?` · ${parts} SMS`:""}`;if(bw)bw.textContent=`واٹس ایپ باری باری (${sel.length})`;
+}
+/* one by one (WhatsApp, or SMS on the website): open the next when the person comes back */
+let RQ=null;
+function rmQueueBar(){
+  const pr=$("#rmProg");if(!pr||!RQ)return;const nx=RQ.list[RQ.i];
+  pr.innerHTML=RQ.i>=RQ.list.length?`<div class="rm-prog done">مکمل · ${RQ.list.length} گاہکوں کو ${RQ.via==="wa"?"واٹس ایپ":"SMS"} کھولا گیا۔</div>`
+    :`<div class="rm-prog"><b class="num">${RQ.i} / ${RQ.list.length}</b> · اگلا: <b>${esc(nx.c.name)}</b> <span id="rmCd"></span><div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm ${RQ.via}" data-rmnext>اگلا کھولیں</button><button type="button" class="btn sm" data-rmstop>روکیں</button></div></div>`;
+}
+function rmOpenNext(){
+  if(!RQ||RQ.i>=RQ.list.length)return;const x=RQ.list[RQ.i++];clearTimeout(RQ.t);RQ.away=true;
+  const pe=[...S.entries].filter(e=>e.cust===x.c.id&&(e.att||[]).length).sort((a,b)=>b.date-a.date)[0];
+  if(RQ.via==="wa")openWhatsApp(x.c.phone,rmWaText(x.c,x.v,pe&&pe.id));else openSMS(x.c.phone,rmText(x.c,x.v));
+  db.update("customers",x.c.id,{remindAt:Date.now(),remindVia:RQ.via});
+  const st=$("#rmst_"+CSS.escape(x.c.id));if(st)st.textContent="✓ کھولا";
+  rmQueueBar();
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState!=="visible"||!RQ||!RQ.away||RQ.i>=RQ.list.length||!$("#rmProg"))return;RQ.away=false;
+  let n=3;const tick=()=>{const cd=$("#rmCd");if(!RQ||!cd)return;if(n<=0){rmOpenNext();return}cd.textContent=`— ${n} سیکنڈ میں خود کھلے گا`;n--;RQ.t=setTimeout(tick,1000)};tick();
+});
+async function rmSendAllSms(list){
+  const pr=$("#rmProg");RQ={stop:false,sms:true};let ok=0,bad=0;
+  for(let i=0;i<list.length;i++){if(RQ.stop)break;const x=list[i],st=$("#rmst_"+CSS.escape(x.c.id));
+    if(pr)pr.innerHTML=`<div class="rm-prog"><b class="num">${i+1} / ${list.length}</b> · ${esc(x.c.name)} کو SMS جا رہا ہے… <div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm" data-rmstop>روکیں</button></div></div>`;
+    try{await sendSmsDirect(x.c.phone,rmText(x.c,x.v));ok++;if(st)st.innerHTML=`<span class="c-pay">✓ گیا</span>`;db.update("customers",x.c.id,{remindAt:Date.now(),remindVia:"sms"})}
+    catch(e){bad++;if(st)st.innerHTML=`<span class="c-owe">✗ نہیں گیا</span>`;
+      if(String(e&&(e.code||e.message)).includes("DENIED")||/permission/i.test(String(e&&e.message))){if(pr)pr.innerHTML=`<div class="rm-prog bad">SMS بھیجنے کی اجازت نہیں ملی۔ فون کی سیٹنگ › ایپس › وارثی بک › اجازتیں میں SMS کی اجازت دیں۔</div>`;RQ=null;return}}
+    await new Promise(r=>setTimeout(r,1200));}
+  if(pr)pr.innerHTML=`<div class="rm-prog done">${RQ&&RQ.stop?"روک دیا · ":""}${ok} گاہکوں کو SMS چلا گیا${bad?` · ${bad} کو نہیں گیا`:""}۔</div>`;RQ=null;
+}
 function waReminder(c,v){
   if(c.kind==="supplier")return v<0?`السلام علیکم ${c.name}،\nہمارے حساب کے مطابق آپ کے ${fmt(-v)} ہمارے ذمے باقی ہیں۔ جلد ادا کر دیں گے، ان شاء اللہ۔${shopLine()}`:`السلام علیکم ${c.name}،\nہمارا حساب ${v>0?"آپ کے ذمے "+fmt(v)+" بنتا ہے":"برابر ہے"}۔${shopLine()}`;
   return v>0?`السلام علیکم ${c.name}،\nآپ کے کھاتے میں ${fmt(v)} باقی ہیں۔ براہ کرم سہولت سے ادائیگی کر دیں۔ شکریہ${payText()}${shopLine()}`:`السلام علیکم ${c.name}،\nآپ کا کھاتہ ${v<0?"ہمارے ذمے "+fmt(-v):"برابر"} ہے۔ شکریہ${shopLine()}`;
@@ -714,7 +798,8 @@ function sheetCust(id){
   const es=S.entries.filter(e=>e.cust===id).sort((a,b)=>a.date-b.date);
   let run=0;const rows=es.map(e=>{run+=(e.type==="gave"?1:-1)*(Number(e.amount)||0);return {...e,run}}).reverse();
   const v=run;
-  {const pe=[...es].reverse().find(x=>(x.att||[]).length);WA={remind:[c.phone,waReminder(c,v),pe&&pe.id],stmt:[c.phone,waStatement(c,rows,v),pe&&pe.id]};}
+  {const pe=[...es].reverse().find(x=>(x.att||[]).length),cu=c.kind!=="supplier"&&v>0;
+    WA={remind:cu?[c.phone,rmText(c,v)+(rmWaExtra()?payText():""),rmWaExtra()&&pe&&pe.id]:[c.phone,waReminder(c,v),pe&&pe.id],stmt:[c.phone,waStatement(c,rows,v),pe&&pe.id],...(cu?{remindSms:[c.phone,rmText(c,v),null]}:{})};}
   openSheet(c.name,`
    <div class="bal-box ${v>0?"owe":v<0?"pay":"zero"}"><div><div class="note">${v>0?"آپ نے لینے ہیں":v<0?"آپ نے دینے ہیں":"حساب برابر ہے"}</div><div class="v ${v>0?"c-owe":v<0?"c-pay":""}">${fmt(Math.abs(v))}</div></div>
      <div class="note"><span class="num">${esc(c.phone||"")}</span><br>${esc(branchName(c.branch))}</div></div>
@@ -871,6 +956,24 @@ function srcChoiceHtml(type){
   return gk+disc+`<div class="fld" id="eSrcBox"><span class="lbl-sm">${k==="pay"?"ادائیگی کہاں سے کی؟":"رقم کیسے ملی؟"}</span><input type="hidden" name="src" id="eSrc" value="${cur}" data-k="${k}">
     <div class="seg" id="eSrcSeg">${opts.map(([v,l])=>`<button type="button" data-src="${v}" aria-pressed="${v===cur}">${l}</button>`).join("")}</div>
     <p class="note" id="eSrcHint" style="margin:4px 0 0" data-h='${esc(JSON.stringify(hint))}'>${hint[cur]}</p></div>`;
+}
+/* supplier payment from the روزنامچہ: the very same entry as "ادائیگی کی" in the supplier's ledger */
+function sheetSupPay(sid,amt){
+  const sups=S.customers.filter(c=>c.kind==="supplier"),bal=balances(),last={};for(const e of S.entries)last[e.cust]=Math.max(last[e.cust]||0,e.date);
+  sups.sort((a,b)=>(bal[a.id]||0)-(bal[b.id]||0)||(last[b.id]||0)-(last[a.id]||0));
+  S.openCust=null;S.supPay=true;S.photos=[];
+  openSheet("سپلائر کو ادائیگی",`<p class="note" style="margin:0 0 8px">یہ ادائیگی سپلائر کے کھاتے اور روزنامچہ دونوں میں ایک ساتھ درج ہوگی — بالکل ویسے جیسے کھاتے میں "ادائیگی کی" سے۔</p>
+    <div class="fld"><label for="spSel">سپلائر</label><select id="spSel"><option value="">سپلائر چنیں (${sups.length}) ▾</option>${sups.map(c=>{const v=bal[c.id]||0;return `<option value="${esc(c.id)}" ${c.id===sid?"selected":""}>${esc(c.name)}${v<0?" — دینے ہیں "+fmt(-v):v>0?" — لینے ہیں "+fmt(v):""}</option>`}).join("")}</select></div>
+    ${sups.length?"":`<p class="note">ابھی کوئی سپلائر نہیں۔ کھاتے › سپلائر میں نیا سپلائر بنائیں۔</p>`}
+    <div id="entryForm"></div>`);
+  if(sid)supPayForm(sid,amt);
+}
+function supPayForm(sid,amt){
+  S.openCust=sid||null;const box=$("#entryForm");if(!box)return;
+  if(!sid){box.innerHTML="";return}
+  box.innerHTML=entryFormHtml("gave");
+  if(S.cashDate){const d=$("#eDate");if(d){d.value=S.cashDate;document.querySelectorAll('[data-dset="eDate"]').forEach(b=>b.setAttribute("aria-pressed",b.dataset.d===S.cashDate))}}
+  const v=balances()[sid]||0,a=$("#eAmt");if(a){a.value=amt?String(amt):"";a.placeholder=v<0?"باقی "+fq(-v):"";a.focus()}
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -1141,6 +1244,8 @@ function syncExpSupp(){
   $("#xPaidRow").hidden=S.xMode!=="part";
   const amt=calcEval(($("#xAmt")||{}).value)||0,paid=S.xMode==="cash"?amt:S.xMode==="credit"?0:Math.min(num(($("#xPaid")||{}).value),amt);
   syncOwn();
+  const owed=ex&&-(balances()[ex.id]||0);
+  const pb=$("#xPayOld");if(pb){pb.hidden=!(owed>0);if(owed>0)pb.innerHTML=`<b>${esc(ex.name)} کے ${fmt(owed)} پہلے سے باقی ہیں۔</b> اگر یہ رقم اُس بقایا کی ادائیگی ہے (نیا مال نہیں)، تو یہاں دبائیں — بقایا کم ہو جائے گا: <button type="button" class="btn sm owe" data-suppay="${esc(ex.id)}" data-amt="${esc(String(amt||""))}">سپلائر کو ادائیگی</button>`}
   $("#xSuppHint").textContent=!led?"":(ex?"":`"${v}" نام کا نیا سپلائر کھاتہ بن جائے گا۔ `)+(amt?(amt-paid>0?`${fmt(amt-paid)} سپلائر کے کھاتے میں "دینے ہیں" لکھا جائے گا${paid?`، نقد ${fmt(paid)} روزنامچہ میں جائے گا`:""}۔`:`پوری رقم نقد دی گئی۔ کھاتے میں ریکارڈ رہے گا، بقایا نہیں بنے گا۔`):"");
 }
 function sheetExpense(dir="out",edit=null){
@@ -1167,6 +1272,7 @@ function sheetExpense(dir="out",edit=null){
           <div class="fld"><span class="lbl-sm">ادائیگی</span><div class="seg"><button type="button" data-xm="cash" aria-pressed="true">پوری نقد دی</button><button type="button" data-xm="credit" aria-pressed="false">ادھار (بعد میں دیں گے)</button><button type="button" data-xm="part" aria-pressed="false">کچھ نقد</button></div></div>
           <div class="fld" id="xPaidRow" hidden><label for="xPaid">نقد کتنا دیا</label><input id="xPaid" name="paid" class="num" inputmode="decimal" placeholder="0"></div>
           <p class="note" id="xSuppHint" style="margin:0"></p>
+          <p class="note pay-old" id="xPayOld" hidden></p>
         </div>
       </div>
     </div>
@@ -1295,7 +1401,8 @@ document.addEventListener("submit",async ev=>{
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
     if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
-    if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":dc>0?"وصولی اور چھوٹ محفوظ":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
+    if(ok&&S.supPay){S.supPay=false;closeSheet();toast("ادائیگی محفوظ · سپلائر کے کھاتے اور روزنامچہ دونوں میں");render()}
+    else if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":dc>0?"وصولی اور چھوٹ محفوظ":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
   }
   if(kind==="item"){
     const unit=unitVal("iUnit"),diff=$("#iDiff").checked,buyUnit=diff?unitVal("iBuy"):unit,buyCost=num(d.cost);
@@ -1471,8 +1578,20 @@ document.addEventListener("click",async ev=>{
   if(ds.bk){S.bulkKind=ds.bk;document.querySelectorAll("[data-bk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.bk===ds.bk));return}
   if(ds.pm){const [k,m]=ds.pm.split(":");if(k==="sale")S.saleMode=m;else S.pMode=m;render();return}
   if(ds.quick){S.afterCust=ds.quick;sheetCustForm({kind:ds.quick,branch:defBranch()});return}
+  if(ds.rmins){const ta=$("#rmTpl");if(ta){const p=ta.selectionStart??ta.value.length;ta.value=ta.value.slice(0,p)+ds.rmins+ta.value.slice(ta.selectionEnd??p);rmSet("wb_rtpl",ta.value);rmSync();ta.focus()}return}
+  if(ds.rmpre){const ta=$("#rmTpl");if(ta){ta.value=ds.rmpre==="roman"?RM_ROMAN:RM_DEF;rmSet("wb_rtpl",ta.value);rmSync()}return}
+  if(ds.rmgo){const list=rmCands().filter(x=>S.rmSel.has(x.c.id)&&x.ph);if(!list.length){toast("پہلے گاہک چنیں");return}
+    if(ds.rmgo==="sms"&&canDirectSms){const parts=list.reduce((a,x)=>a+smsParts(rmText(x.c,x.v)),0);const pr=$("#rmProg");
+      pr.innerHTML=`<div class="confirm del-confirm"><b>${list.length} گاہکوں کو SMS بھیجیں؟</b><span>کل ${parts} SMS آپ کی سم سے جائیں گے۔</span><div class="del-btns"><button type="button" class="btn sms sm" data-rmsmsyes>ہاں، بھیجیں</button><button type="button" class="btn sm" data-delno>نہیں</button></div></div>`;return}
+    RQ={via:ds.rmgo==="wa"?"wa":"sms",list,i:0};rmOpenNext();return}
+  if("rmsmsyes" in ds){rmSendAllSms(rmCands().filter(x=>S.rmSel.has(x.c.id)&&x.ph));return}
+  if("rmnext" in ds){rmOpenNext();return}
+  if("rmstop" in ds){if(RQ){clearTimeout(RQ.t);if(RQ.sms)RQ.stop=true;else{const p=$("#rmProg");if(p)p.innerHTML=`<div class="rm-prog done">روک دیا · ${RQ.i} گاہکوں کو کھولا گیا۔</div>`;RQ=null}}return}
+  if(ds.act==="remind"){sheetRemind();return}
+  if(ds.act==="supPay"){sheetSupPay();return}
+  if(ds.suppay){sheetSupPay(ds.suppay,ds.amt?num(ds.amt):0);return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]+photoLinkText(x[2]));return}
-  if(ds.sms){const x=WA[ds.sms];if(x)openSMS(x[0],x[1]+photoLinkText(x[2]));return}
+  if(ds.sms){const x=(ds.sms==="remind"&&WA.remindSms)||WA[ds.sms];if(x)openSMS(x[0],x[1]+photoLinkText(x[2]));return}
   if(ds.rp){if(ds.rp==="custom"&&S.rp!=="custom"){const R0=rRange();S.rFrom=ymd(R0[0]);S.rTo=ymd(R0[1]-1)}S.rp=ds.rp;render();if(ds.rp==="custom")setTimeout(()=>{const i=$("#rFrom");if(i){i.scrollIntoView({block:"center"});i.focus()}},50);return}
   if(ds.csv){exportCsv(ds.csv);return}
   if(ds.purv){sheetPurchase(ds.purv);return}
@@ -1494,7 +1613,7 @@ document.addEventListener("click",async ev=>{
   if(ds.discrest){const i=$("#eDisc");if(i){i.value=ds.discrest;syncDisc()}return}
   if(ds.rrm!==undefined){S.retLines.splice(+ds.rrm,1);renderRet();syncRetAmt();return}
   if(ds.entry){S.photos=[];S.retLines=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
-  if("cancelentry" in ds){$("#entryForm").innerHTML="";return}
+  if("cancelentry" in ds){if(S.supPay){S.supPay=false;closeSheet();return}$("#entryForm").innerHTML="";return}
   if(ds.delentry){const box=document.querySelector("#sheet #del_"+CSS.escape(ds.delentry))||$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=delConfirmHtml("entries",ds.delentry,"یہ اندراج");return}
   if(ds.delyes){const id=ds.delyes,de=S.entries.find(x=>x.id===id);if(await w(()=>{db.remove("entries",id);
     if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id);for(const x of S.entries.filter(x=>x.discFor===id))db.remove("entries",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
@@ -1540,6 +1659,8 @@ document.addEventListener("input",e=>{
   if(t.id==="q"){S.q=t.value;const pos=t.selectionStart;render();const n=$("#q");n.focus();n.setSelectionRange(pos,pos)}
   if(t.id==="sq"){S.stockQ=t.value;const pos=t.selectionStart;render();const n=$("#sq");n.focus();n.setSelectionRange(pos,pos)}
   if(t.id==="eDisc"||t.id==="eAmt")syncDisc();
+  if(t.id==="rmTpl"){rmSet("wb_rtpl",t.value);rmSync()}
+  if(t.id==="rmMin"){S.rmMin=t.value;const p=t.selectionStart;S.rmSel=new Set(rmCands().filter(x=>x.ph).map(x=>x.c.id));rmRender()}
   if(t.dataset.rq!==undefined||t.dataset.rp!==undefined){const l=S.retLines[+(t.dataset.rq??t.dataset.rp)];if(l){l[t.dataset.rq!==undefined?"qty":"price"]=num(t.value);syncRetAmt();const tt=document.querySelector("#retLines b.num");if(tt)tt.textContent=fmt(retTotal())}}
   if(t.dataset.cq!==undefined){S.cart[+t.dataset.cq].qty=num(t.value);updTotal()}
   if(t.dataset.cp!==undefined){S.cart[+t.dataset.cp].price=num(t.value);updTotal()}
@@ -1564,6 +1685,11 @@ document.addEventListener("change",e=>{
   if(t.id==="retPick"){const v=t.value.trim(),it=S.items.find(x=>x.name===v),bc=!it&&findCode(v),x=it||(bc&&bc.it);
     if(x){const n=it?1:bc.n,ex=S.retLines.find(l=>l.item===x.id);if(ex)ex.qty=Math.round((ex.qty+n)*1000)/1000;else S.retLines.push({item:x.id,name:x.name,unit:x.unit||"",qty:n,price:Number(x.sale)||0});t.value="";renderRet();syncRetAmt();t.focus()}
     else if(v)toast("یہ چیز اسٹاک میں نہیں ملی")}
+  if(t.dataset.rmsel){t.checked?S.rmSel.add(t.dataset.rmsel):S.rmSel.delete(t.dataset.rmsel);rmSync()}
+  if(t.id==="rmAll"){for(const x of rmCands())if(x.ph)t.checked?S.rmSel.add(x.c.id):S.rmSel.delete(x.c.id);rmRender()}
+  if(t.id==="rmDays"){S.rmDays=t.value;S.rmSel=new Set(rmCands().filter(x=>x.ph).map(x=>x.c.id));rmRender()}
+  if(t.id==="rmWaExtra")rmSet("wb_rwa",t.checked?"1":"0");
+  if(t.id==="spSel")supPayForm(t.value);
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;
