@@ -772,15 +772,29 @@ document.addEventListener("visibilitychange",()=>{
   if(document.visibilityState!=="visible"||!RQ||!RQ.away||RQ.i>=RQ.list.length||!$("#rmProg"))return;RQ.away=false;
   let n=3;const tick=()=>{const cd=$("#rmCd");if(!RQ||!cd)return;if(n<=0){rmOpenNext();return}cd.textContent=`— ${n} سیکنڈ میں خود کھلے گا`;n--;RQ.t=setTimeout(tick,1000)};tick();
 });
+/* why an SMS did not go (codes from the phone) */
+function smsErrText(e){
+  const c=String((e&&e.code)||""),m=String((e&&e.message)||e||"");
+  if(c==="DENIED"||/permission/i.test(m))return "SMS کی اجازت نہیں";
+  if(c==="E5"||c==="E7"||c==="E8")return "فون نے روک دیا (زیادہ SMS کی اجازت نہیں دی)";
+  if(c==="E4")return "سگنل نہیں";
+  if(c==="E2")return "فون کا ریڈیو بند (فلائٹ موڈ؟)";
+  if(c==="E1")return "نیٹ ورک نے نہیں بھیجا (SMS پیکج / بیلنس؟)";
+  if(c==="TIMEOUT")return "فون سے جواب نہیں آیا";
+  return "نہیں گیا"+(c?" ("+c+")":"");
+}
+/* one at a time: the next SMS goes only after the phone confirms this one left (or failed) */
 async function rmSendAllSms(list){
-  const pr=$("#rmProg");RQ={stop:false,sms:true};let ok=0,bad=0,err="";
+  const pr=$("#rmProg");RQ={stop:false,sms:true};let ok=0;const failed=[];
   for(let i=0;i<list.length;i++){if(RQ.stop)break;const x=list[i],st=$("#rmst_"+CSS.escape(x.c.id));
-    if(pr)pr.innerHTML=`<div class="rm-prog"><b class="num">${i+1} / ${list.length}</b> · ${esc(x.c.name)} کو SMS جا رہا ہے… <div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm" data-rmstop>روکیں</button></div></div>`;
+    if(pr)pr.innerHTML=`<div class="rm-prog"><b class="num">${i+1} / ${list.length}</b> · ${esc(x.c.name)} کو SMS جا رہا ہے… <small class="note" style="display:block">فون پوچھے کہ "بہت زیادہ پیغامات بھیجے جا رہے ہیں" تو <b>"ہمیشہ اجازت دیں / Always allow"</b> چنیں (اگر "یاد رکھیں" کا خانہ ہو تو اس پر ٹک لگائیں)۔</small><div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm" data-rmstop>روکیں</button></div></div>`;
+    if(st)st.innerHTML=`<span class="note">جا رہا ہے…</span>`;
     try{await sendSmsDirect(x.c.phone,rmText(x.c,x.v));ok++;if(st)st.innerHTML=`<span class="c-pay">✓ گیا</span>`;db.update("customers",x.c.id,{remindAt:Date.now(),remindVia:"sms"})}
-    catch(e){bad++;err=err||String((e&&(e.message||e.code))||e);console.error(e);if(st)st.innerHTML=`<span class="c-owe">✗ نہیں گیا</span>`;
-      if(String(e&&(e.code||e.message)).includes("DENIED")||/permission/i.test(String(e&&e.message))){if(pr)pr.innerHTML=`<div class="rm-prog bad">SMS بھیجنے کی اجازت نہیں ملی۔ فون کی سیٹنگ › ایپس › وارثی بک › اجازتیں میں SMS کی اجازت دیں۔</div>`;RQ=null;return}}
-    await new Promise(r=>setTimeout(r,1200));}
-  if(pr)pr.innerHTML=`<div class="rm-prog done">${RQ&&RQ.stop?"روک دیا · ":""}${ok} گاہکوں کو SMS چلا گیا${bad?` · ${bad} کو نہیں گیا (${esc(err)})`:""}۔</div>`;RQ=null;
+    catch(e){console.error(e);const why=smsErrText(e);failed.push(x);if(st)st.innerHTML=`<span class="c-owe">✗ ${esc(why)}</span>`;
+      if(why==="SMS کی اجازت نہیں"){if(pr)pr.innerHTML=`<div class="rm-prog bad">SMS بھیجنے کی اجازت نہیں ملی۔ فون کی سیٹنگ › ایپس › وارثی بک › اجازتیں میں SMS کی اجازت دیں۔</div>`;RQ=null;return}}
+    await new Promise(r=>setTimeout(r,1500));}
+  const stopped=RQ&&RQ.stop;RQ=null;S.rmFailed=failed;
+  if(pr)pr.innerHTML=`<div class="rm-prog ${failed.length?"bad":"done"}">${stopped?"روک دیا · ":""}${ok} گاہکوں کو SMS چلا گیا${failed.length?` · <b>${failed.length} کو نہیں گیا</b> (فہرست میں ✗ والے)<div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm sms" data-rmretry>جو نہیں گئے، انہیں دوبارہ بھیجیں</button></div>`:""}</div>`;
 }
 function waReminder(c,v){
   if(c.kind==="supplier")return v<0?`السلام علیکم ${c.name}،\nہمارے حساب کے مطابق آپ کے ${fmt(-v)} ہمارے ذمے باقی ہیں۔ جلد ادا کر دیں گے، ان شاء اللہ۔${shopLine()}`:`السلام علیکم ${c.name}،\nہمارا حساب ${v>0?"آپ کے ذمے "+fmt(v)+" بنتا ہے":"برابر ہے"}۔${shopLine()}`;
@@ -1631,6 +1645,7 @@ document.addEventListener("click",async ev=>{
       if(go)rmSendAllSms(list);return}
     RQ={via:ds.rmgo==="wa"?"wa":"sms",list,i:0};rmOpenNext();return}
   if("rmsmsyes" in ds){rmSendAllSms(rmCands().filter(x=>S.rmSel.has(x.c.id)&&x.ph));return}
+  if("rmretry" in ds){const L=(S.rmFailed||[]).map(f=>rmCands().find(x=>x.c.id===f.c.id)).filter(Boolean);if(L.length)rmSendAllSms(L);return}
   if("rmnext" in ds){rmOpenNext();return}
   if("rmstop" in ds){if(RQ){clearTimeout(RQ.t);if(RQ.sms)RQ.stop=true;else{const p=$("#rmProg");if(p)p.innerHTML=`<div class="rm-prog done">روک دیا · ${RQ.i} گاہکوں کو کھولا گیا۔</div>`;RQ=null}}return}
   if(ds.act==="remind"){sheetRemind();return}
