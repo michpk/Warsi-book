@@ -569,3 +569,4 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .rm-prog{background:var(--accent-2);border-radius:10px;padding:10px 12px;margin-top:8px}
 .rm-prog.done{background:var(--pay-bg);color:var(--pay);font-weight:600}
 .rm-prog.bad{background:var(--owe-bg);color:var(--owe)}
+.rm-actions #rmProg{grid-column:1/-1}.rm-actions #rmProg:empty{display:none}.rm-actions .rm-prog{margin-top:0}

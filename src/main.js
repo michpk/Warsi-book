@@ -88,9 +88,9 @@ function cashFlow(from,to){
   for(const s of S.sales)if(inBranch(s)&&s.date>=from&&s.date<to&&s.paid>0)inR.push({date:s.date,amt:s.paid,label:"بل #"+s.no+" · "+(s.custName||"نقد گاہک")});
   for(const e of S.entries){if(!inBranch(e)||e.date<from||e.date>=to||e.sale||e.purchase||e.exp||e.src==="bank")continue;const c=ck(e.cust),sup=c.kind==="supplier";
     if(!sup&&e.type==="got"&&!noMoney(e))inR.push({date:e.date,amt:e.amount,noTill:e.inSale===false,label:"وصولی · "+(c.name||"")+(e.note?" · "+e.note:"")+(e.inSale===false?" — پہلے ہی گلّے کی سیل میں گنی جا چکی، دوبارہ نہیں جڑی":"")});
-    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,ent:e.id,tag:e.src==="till"?tillTag("e",e.id):"",label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
+    if(sup&&e.type==="gave")out.push({date:e.date,amt:e.amount,ent:e.id,tag:(e.src==="till"?tillTag("e",e.id):"")+expTag(e.id),label:"ادائیگی · "+(c.name||"")+(e.src==="till"?" (گلّے کی سیل سے)":e.src==="own"?" (اپنی جیب سے)":"")+(e.note?" · "+e.note:"")});}
   for(const p of S.purchases)if(inBranch(p)&&p.date>=from&&p.date<to&&p.paid>0)out.push({date:p.date,amt:p.paid,label:"خریداری #"+p.no+" · "+(p.suppName||"")});
-  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,tag:tillTag("x",x.id),label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
+  for(const x of S.expenses)if(inBranch(x)&&x.date>=from&&x.date<to&&!x.expFor){const r={date:x.date,amt:x.dir!=="in"&&x.paid!=null?x.paid:x.amount,exp:x.id,att:(x.att||[]).length};if(!r.amt&&x.dir!=="in")continue;if(x.dir==="in"){const nt=!!x.ownFor||expCat(x)===OWNER_IN;inR.push({...r,noTill:nt,label:(x.sale?"آمد (فروخت) · ":"آمد · ")+(x.note||"")+(nt?" — گلّے کے کیش میں شامل نہیں":"")})}else out.push({...r,tag:tillTag("x",x.id),label:"خرچہ · "+(x.note||"")+(x.suppName?" · "+x.suppName:"")+(x.paid!=null&&x.paid<x.amount?` (کل ${fq(x.amount)} · نقد ${fq(x.paid)} · ادھار ${fq(x.amount-x.paid)})`:"")})}
   return {inR,out};
 }
 /* bills + any manual income the shop chose to count as a sale */
@@ -190,7 +190,7 @@ function vHome(){
       :`<div class="empty">سب چیزوں کا اسٹاک ٹھیک ہے۔ جس چیز کا اسٹاک "کم از کم" سے نیچے جائے گا، وہ یہاں آئے گی۔</div>`}
     </section>
     <section class="card"><div class="card-h"><h3>تازہ اندراجات</h3><button class="btn ghost sm" data-go="khata">سب کھاتے</button></div>
-      ${recent.length?`<div class="list">${recent.map(e=>`<button class="row" data-cust="${esc(e.cust)}"><div class="av ${e.type==="gave"?"owe":"pay"}">${esc((cname(e.cust)||"?").trim()[0]||"?")}</div><div class="main"><div class="t">${esc(cname(e.cust))}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||(e.type==="gave"?"ادھار دیا":"رقم ملی"))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div><div class="k c-muted">${e.type==="gave"?"دیے":"ملے"}</div></div></button>`).join("")}</div>`
+      ${recent.length?`<div class="list">${recent.map(e=>`<button class="row" data-cust="${esc(e.cust)}"><div class="av ${e.type==="gave"?"owe":"pay"}">${esc((cname(e.cust)||"?").trim()[0]||"?")}</div><div class="main"><div class="t">${esc(cname(e.cust))}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||((S.customers.find(x=>x.id===e.cust)||{}).kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال آیا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div><div class="k c-muted">${e.type==="gave"?"دیے":"ملے"}</div></div></button>`).join("")}</div>`
       :`<div class="empty">ابھی کوئی لین دین درج نہیں ہوا۔ "کھاتے" میں گاہک بنا کر پہلا اندراج کریں۔</div>`}
     </section>
   </div>`;
@@ -730,8 +730,7 @@ function sheetRemind(){
       <label class="note" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" id="rmWaExtra" ${rmWaExtra()?"checked":""}> واٹس ایپ پیغام میں ادائیگی کے اکاؤنٹ اور بل کی تصویر کا لنک بھی (SMS میں نہیں جاتے)</label></details>
     <div class="rm-bar"><label><input type="checkbox" id="rmAll" checked> سب چنیں</label><span class="note" id="rmCount"></span></div>
     <div id="rmList" class="list rm-list"></div>
-    <div class="rm-actions"><button type="button" class="btn sms" data-rmgo="sms">${SMS_ICON}<span>SMS بھیجیں</span></button><button type="button" class="btn wa" data-rmgo="wa">${WA_ICON}<span>واٹس ایپ (باری باری)</span></button></div>
-    <div id="rmProg"></div>
+    <div class="rm-actions"><div id="rmProg"></div><button type="button" class="btn sms" data-rmgo="sms">${SMS_ICON}<span>SMS بھیجیں</span></button><button type="button" class="btn wa" data-rmgo="wa">${WA_ICON}<span>واٹس ایپ (باری باری)</span></button></div>
     <p class="note" style="margin:8px 0 0">${canDirectSms?"SMS ایک ہی بار میں آپ کی سم سے سب کو چلے جائیں گے (پہلی بار ایپ اجازت مانگے گی)۔":"ویب سائٹ سے SMS خود نہیں جا سکتے، اس لیے باری باری SMS ایپ کھلے گی۔ ایک کلک میں سب کو SMS موبائل ایپ سے جاتے ہیں۔"} واٹس ایپ ہر گاہک کے لیے کھلے گا، آپ "بھیجیں" دبا کر واپس آئیں تو اگلا خود کھل جائے گا۔</p>`);
   rmRender();
 }
@@ -774,14 +773,14 @@ document.addEventListener("visibilitychange",()=>{
   let n=3;const tick=()=>{const cd=$("#rmCd");if(!RQ||!cd)return;if(n<=0){rmOpenNext();return}cd.textContent=`— ${n} سیکنڈ میں خود کھلے گا`;n--;RQ.t=setTimeout(tick,1000)};tick();
 });
 async function rmSendAllSms(list){
-  const pr=$("#rmProg");RQ={stop:false,sms:true};let ok=0,bad=0;
+  const pr=$("#rmProg");RQ={stop:false,sms:true};let ok=0,bad=0,err="";
   for(let i=0;i<list.length;i++){if(RQ.stop)break;const x=list[i],st=$("#rmst_"+CSS.escape(x.c.id));
     if(pr)pr.innerHTML=`<div class="rm-prog"><b class="num">${i+1} / ${list.length}</b> · ${esc(x.c.name)} کو SMS جا رہا ہے… <div class="del-btns" style="margin-top:6px"><button type="button" class="btn sm" data-rmstop>روکیں</button></div></div>`;
     try{await sendSmsDirect(x.c.phone,rmText(x.c,x.v));ok++;if(st)st.innerHTML=`<span class="c-pay">✓ گیا</span>`;db.update("customers",x.c.id,{remindAt:Date.now(),remindVia:"sms"})}
-    catch(e){bad++;if(st)st.innerHTML=`<span class="c-owe">✗ نہیں گیا</span>`;
+    catch(e){bad++;err=err||String((e&&(e.message||e.code))||e);console.error(e);if(st)st.innerHTML=`<span class="c-owe">✗ نہیں گیا</span>`;
       if(String(e&&(e.code||e.message)).includes("DENIED")||/permission/i.test(String(e&&e.message))){if(pr)pr.innerHTML=`<div class="rm-prog bad">SMS بھیجنے کی اجازت نہیں ملی۔ فون کی سیٹنگ › ایپس › وارثی بک › اجازتیں میں SMS کی اجازت دیں۔</div>`;RQ=null;return}}
     await new Promise(r=>setTimeout(r,1200));}
-  if(pr)pr.innerHTML=`<div class="rm-prog done">${RQ&&RQ.stop?"روک دیا · ":""}${ok} گاہکوں کو SMS چلا گیا${bad?` · ${bad} کو نہیں گیا`:""}۔</div>`;RQ=null;
+  if(pr)pr.innerHTML=`<div class="rm-prog done">${RQ&&RQ.stop?"روک دیا · ":""}${ok} گاہکوں کو SMS چلا گیا${bad?` · ${bad} کو نہیں گیا (${esc(err)})`:""}۔</div>`;RQ=null;
 }
 function waReminder(c,v){
   if(c.kind==="supplier")return v<0?`السلام علیکم ${c.name}،\nہمارے حساب کے مطابق آپ کے ${fmt(-v)} ہمارے ذمے باقی ہیں۔ جلد ادا کر دیں گے، ان شاء اللہ۔${shopLine()}`:`السلام علیکم ${c.name}،\nہمارا حساب ${v>0?"آپ کے ذمے "+fmt(v)+" بنتا ہے":"برابر ہے"}۔${shopLine()}`;
@@ -847,7 +846,7 @@ function sheetCust(id){
    ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
-   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}${c.kind==="supplier"&&e.type==="gave"?tillTag("e",e.id):""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
+   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}${c.kind==="supplier"&&e.type==="gave"?tillTag("e",e.id)+expTag(e.id):""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
@@ -857,6 +856,24 @@ function sheetCust(id){
 }
 /* where the money came from / went: decides the till and the daily sale */
 function srcPref(k,d){try{return localStorage.getItem("wb_src_"+k)||d}catch(e){return d}}
+/* ---------- supplier payment also counted as an expense (monthly statement) ----------
+   The expense row (expFor = entry) is for the expense totals only; the cash already left with the payment itself,
+   so the روزنامچہ does not take it out of the till a second time. */
+const SUP_EXP="سپلائر کو ادائیگی";
+function expForData(e,eid,nm){return {amount:Number(e.amount)||0,paid:Number(e.amount)||0,dir:"out",pl:true,sale:false,att:[],note:SUP_EXP+" · "+nm+(e.note?" · "+e.note:""),date:e.date,branch:e.branch||"",expFor:eid,...by()}}
+function supPayOf(id){const e=S.entries.find(x=>x.id===id);if(!e||e.type!=="gave"||e.exp||e.purchase)return null;const c=S.customers.find(x=>x.id===e.cust)||{};return c.kind==="supplier"?{e,c,x:S.expenses.find(v=>v.expFor===id)}:null}
+async function setExpLink(id,on){
+  const t=supPayOf(id);if(!t)return false;const ops=[];
+  if(on&&!t.x)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:expForData(t.e,id,t.c.name||"")});
+  if(!on&&t.x)ops.push({op:"update",col:"expenses",id:t.x.id,data:{del:true}});
+  ops.push({op:"update",col:"entries",id,data:{inExp:!!on}});
+  return w(()=>db.batch(ops));
+}
+function expLinkHtml(id){
+  const t=supPayOf(id);if(!t)return "";const on=!!t.x;
+  return `<label class="sale-toggle exp-tog"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-exptog="${esc(id)}" ${on?"checked":""}> <span><b>روزانہ / ماہانہ خرچے میں شامل</b><small>${on?"یہ ادائیگی خرچے کی رپورٹ میں \"سپلائر کو ادائیگی\" کے نام سے گنی جا رہی ہے۔":"یہ ادائیگی صرف کھاتے میں ہے، خرچے میں نہیں گنی جاتی۔"} گلّے کا کیش اس سے دوبارہ نہیں بدلتا۔</small></span></label>`;
+}
+const expTag=id=>{const t=supPayOf(id);return t&&t.x?` <span class="pill owe">خرچے میں شامل</span>`:""};
 /* ---------- delete: this one, or everything linked to it ----------
    Links: a supplier payment ↔ its till-sale income (payFor), a receipt ↔ its discount (discFor),
    an expense ↔ its supplier-ledger lines (exp) and its own-pocket / till-sale incomes (ownFor, saleFor). */
@@ -865,13 +882,13 @@ function linkedRecs(col,id){
   const add=(c,i)=>{const k=c+":"+i;if(seen.has(k))return;if(!S[c].some(v=>v.id===i))return;seen.add(k);out.push([c,i]);q.push([c,i])};
   while(q.length){const [c,i]=q.shift();
     if(c==="entries"){const e=S.entries.find(v=>v.id===i);if(!e)continue;
-      for(const x of S.expenses)if(x.payFor===i)add("expenses",x.id);
+      for(const x of S.expenses)if(x.payFor===i||x.expFor===i)add("expenses",x.id);
       for(const x of S.entries)if(x.discFor===i)add("entries",x.id);
       if(e.discFor)add("entries",e.discFor);if(e.exp)add("expenses",e.exp)}
     else{const x=S.expenses.find(v=>v.id===i);if(!x)continue;
       for(const e of S.entries)if(e.exp===i)add("entries",e.id);
       for(const v of S.expenses)if(v.ownFor===i||v.saleFor===i)add("expenses",v.id);
-      if(x.payFor)add("entries",x.payFor);if(x.saleFor)add("expenses",x.saleFor);if(x.ownFor)add("expenses",x.ownFor)}}
+      if(x.payFor)add("entries",x.payFor);if(x.expFor)add("entries",x.expFor);if(x.saleFor)add("expenses",x.saleFor);if(x.ownFor)add("expenses",x.ownFor)}}
   return out;
 }
 function recLabel(c,i){
@@ -920,12 +937,12 @@ function tillSaleHtml(kind,id){
 }
 const tillTag=(kind,id)=>{const t=tillOf(kind,id);return t?(t.inc?` <span class="pill pay">سیل میں شامل</span>`:` <span class="pill">سیل میں شامل نہیں</span>`):""};
 /* on save: "should this money go into the sale?"  resolves true (yes) / false (no) / null (go back) */
-function askSale(amount,text){
+function askSale(amount,text,o={}){
   return new Promise(res=>{
     const el=document.createElement("div");el.id="askSale";el.setAttribute("dir","rtl");el.setAttribute("lang","ur");
-    el.innerHTML=`<div class="ask-box" role="alertdialog" aria-modal="true" aria-labelledby="askT"><h3 id="askT">کیا یہ رقم سیل میں شامل کرنی ہے؟</h3>
+    el.innerHTML=`<div class="ask-box" role="alertdialog" aria-modal="true" aria-labelledby="askT"><h3 id="askT">${esc(o.title||"کیا یہ رقم سیل میں شامل کرنی ہے؟")}</h3>
       <div class="ask-amt num">${fmt(amount)}</div><p class="note">${esc(text)}</p>
-      <div class="ask-btns"><button type="button" class="btn pay" data-a="1">ہاں، سیل میں شامل کریں</button><button type="button" class="btn" data-a="0">نہیں، سیل میں شامل نہ کریں</button></div>
+      <div class="ask-btns"><button type="button" class="btn ${o.cls||"pay"}" data-a="1">${esc(o.yes||"ہاں، سیل میں شامل کریں")}</button><button type="button" class="btn" data-a="0">${esc(o.no||"نہیں، سیل میں شامل نہ کریں")}</button></div>
       <button type="button" class="ask-back" data-a="">← واپس جائیں</button></div>`;
     const done=v=>{document.removeEventListener("keydown",key,true);el.remove();res(v)};
     const key=ev=>{if(ev.key==="Escape"){ev.preventDefault();ev.stopPropagation();done(null)}};
@@ -1194,13 +1211,14 @@ function sheetExpView(id){
     ${x.ownFor?`<p class="note">یہ رقم ایک خرچے کے لیے اپنی جیب سے ڈالی گئی تھی۔</p>`:""}
     ${x.payFor||x.saleFor?`<p class="note">یہ رقم گلّے کی سیل سے ${x.payFor?"سپلائر کو ادائیگی":"ایک خرچے"} میں گئی، اس لیے سیل میں شامل ہے۔ ${(()=>{const t=tillOf("x",x.id);if(!t)return "";const e=t.kind==="e"&&S.entries.find(v=>v.id===t.id);return e?`<button class="btn sm" data-entv-btn="${esc(e.id)}">سپلائر والی ادائیگی کھولیں</button>`:`<button class="btn sm" data-expv-btn="${esc(t.id)}">خرچہ کھولیں</button>`})()}</p>`:""}
     ${tillSaleHtml("x",x.id)}
+    ${x.expFor?`<p class="note">یہ سپلائر کو کی گئی ادائیگی ہے، جو خرچے کی رپورٹ میں گنی جا رہی ہے۔ گلّے کا کیش اسی ادائیگی سے کم ہو چکا، یہ دوبارہ نہیں گنا جاتا۔ ${S.entries.some(v=>v.id===x.expFor)?`<button class="btn sm" data-entv-btn="${esc(x.expFor)}">ادائیگی کھولیں</button>`:""}</p>`:""}
     ${x.pl===false&&!x.sale?`<p class="note">یہ رقم منافع کے حساب میں شامل نہیں، صرف کیش میں ہے۔</p>`:""}
     ${inc&&!x.payFor&&!x.saleFor?`<label class="sale-toggle"${S.canWrite?"":" style=\"pointer-events:none\""}><input type="checkbox" data-togsale="${esc(x.id)}" ${x.sale?"checked":""}> <span><b>فروخت میں شمار</b><small>${x.sale?"یہ رقم فروخت میں جڑی ہے۔":"یہ رقم صرف آمد ہے، فروخت میں نہیں۔"}</small></span></label>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">تصویریں</h4>
     <div class="photo-grid" id="attGrid">${att.length?att.map(a=>`<div class="thumb lg" data-att="${esc(a)}"><span class="note">لوڈ ہو رہی ہے…</span></div>`).join(""):`<p class="note" style="margin:0">اس اندراج کے ساتھ کوئی تصویر نہیں۔</p>`}</div>
     ${S.canWrite&&att.length<MAX_PHOTOS?`<form class="f" data-form="addphoto" data-id="${esc(x.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`:""}
     ${expEditHtml(x)}
-    ${x.payFor?"":dateEditHtml("expenses",x)}
+    ${x.payFor||x.expFor?"":dateEditHtml("expenses",x)}
     ${S.isAdmin?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delexp="${esc(x.id)}">یہ ${inc?"آمد":"خرچہ"} حذف کریں</button></div><div id="dx_${esc(x.id)}"></div>`:""}`);
   for(const a of att)loadAtt(a);
 }
@@ -1223,7 +1241,7 @@ function sheetEntryView(id){
   S.openCust=null;S.view={col:"entries",id};
   openSheet(c.name||"اندراج",`
     <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
-    ${tillSaleHtml("e",e.id)}
+    ${tillSaleHtml("e",e.id)}${expLinkHtml(e.id)}
     ${(e.lines||[]).length?`<h4 style="margin:14px 0 8px;font-size:14px">واپس آیا مال (اسٹاک میں جڑ چکا)</h4><div class="list">${e.lines.map(l=>`<div class="row" style="cursor:default"><div class="main"><div class="t">${esc(l.name)}</div><div class="s"><span class="num">${fq(l.qty)}</span> ${esc(l.unit||"")} × Rs <span class="num">${fq(l.price)}</span></div></div><div class="amt"><div class="v">${fmt(l.qty*l.price)}</div></div></div>`).join("")}</div>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
@@ -1388,7 +1406,7 @@ document.addEventListener("submit",async ev=>{
     const nd=withDate(x.date,d.date);
     await w(()=>{db.update(col,id,{date:nd});
       if(col==="expenses")for(const e of S.entries.filter(e=>e.exp===id))db.update("entries",e.id,{date:withDate(e.date,d.date)});
-      if(col==="entries")for(const x of S.expenses.filter(x=>x.payFor===id))db.update("expenses",x.id,{date:withDate(x.date,d.date)});
+      if(col==="entries")for(const x of S.expenses.filter(x=>x.payFor===id||x.expFor===id))db.update("expenses",x.id,{date:withDate(x.date,d.date)});
       if(col==="entries")for(const x of S.entries.filter(x=>x.discFor===id))db.update("entries",x.id,{date:withDate(x.date,d.date)});
       if(col==="expenses")for(const e of S.expenses.filter(e=>e.ownFor===id||e.saleFor===id))db.update("expenses",e.id,{date:withDate(e.date,d.date)});});
     toast("تاریخ بدل گئی: "+new Date(nd).toLocaleDateString("en-GB"));
@@ -1411,6 +1429,10 @@ document.addEventListener("submit",async ev=>{
         :`${nm} سے رقم ملی۔ اگر یہ رقم پہلے ہی گلّے کی روزانہ سیل میں گنی جا چکی ہے تو "نہیں" دبائیں — پھر یہ نہ سیل میں دوبارہ جڑے گی نہ گلّے کے کیش میں۔`);
       if(inSale===null){if(btn)btn.disabled=false;return}
     }
+    // a supplier payment can also be counted in the day's / month's expenses (shown in the monthly statement)
+    const supE=c&&c.kind==="supplier"&&f.dataset.type==="gave";let inExp=false;
+    if(supE){inExp=await askSale(amt,`${nm} کو ادائیگی۔ "ہاں" دبائیں تو یہ رقم روزانہ اور ماہانہ خرچے میں بھی گنی جائے گی (رپورٹ میں "سپلائر کو ادائیگی" کے نام سے)۔ گلّے کا کیش دوبارہ کم نہیں ہوگا۔`,{title:"کیا یہ ادائیگی خرچے میں شامل کرنی ہے؟",yes:"ہاں، خرچے میں شامل کریں",no:"نہیں، صرف کھاتے میں",cls:"owe"});
+      if(inExp===null){if(btn)btn.disabled=false;return}}
     const note=gk?GK_LABEL[gk]+(d.note.trim()?" · "+d.note.trim():""):d.note.trim();
     const rl=gk==="ret"?(S.retLines||[]).filter(l=>l.qty>0&&S.items.some(x=>x.id===l.item)):[];
     const rb=(c&&c.branch&&S.branches.some(b=>b.id===c.branch))?c.branch:defBranch();
@@ -1419,6 +1441,7 @@ document.addEventListener("submit",async ev=>{
     if(dc>0){const dnote="ڈسکاؤنٹ / چھوٹ"+(amt>0?" (وصولی "+fmt(amt)+" کے ساتھ)":"")+(d.note.trim()?" · "+d.note.trim():"");
       const de={op:"set",col:"entries",id:newId("entries"),data:{cust:S.openCust,type:"got",amount:dc,gk:"disc",att:[],note:dnote,date:dt+1,branch:c?c.branch:"",...(amt>0?{discFor:eid}:{}),...by()}};
       if(amt>0)ops.push(de);else{de.data.att=att;ops.splice(0,1,de)}}
+    if(supE){ops[0].data.inExp=!!inExp;if(inExp)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:expForData(ops[0].data,eid,nm)})}
     if(src==="till"&&inSale)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     ok=await w(()=>db.batch(ops));
@@ -1603,8 +1626,9 @@ document.addEventListener("click",async ev=>{
   if(ds.rmins){const ta=$("#rmTpl");if(ta){const p=ta.selectionStart??ta.value.length;ta.value=ta.value.slice(0,p)+ds.rmins+ta.value.slice(ta.selectionEnd??p);rmSet("wb_rtpl",ta.value);rmSync();ta.focus()}return}
   if(ds.rmpre){const ta=$("#rmTpl");if(ta){ta.value=ds.rmpre==="roman"?RM_ROMAN:RM_DEF;rmSet("wb_rtpl",ta.value);rmSync()}return}
   if(ds.rmgo){const list=rmCands().filter(x=>S.rmSel.has(x.c.id)&&x.ph);if(!list.length){toast("پہلے گاہک چنیں");return}
-    if(ds.rmgo==="sms"&&canDirectSms){const parts=list.reduce((a,x)=>a+smsParts(rmText(x.c,x.v)),0);const pr=$("#rmProg");
-      pr.innerHTML=`<div class="confirm del-confirm"><b>${list.length} گاہکوں کو SMS بھیجیں؟</b><span>کل ${parts} SMS آپ کی سم سے جائیں گے۔</span><div class="del-btns"><button type="button" class="btn sms sm" data-rmsmsyes>ہاں، بھیجیں</button><button type="button" class="btn sm" data-delno>نہیں</button></div></div>`;return}
+    if(ds.rmgo==="sms"&&canDirectSms){const parts=list.reduce((a,x)=>a+smsParts(rmText(x.c,x.v)),0);
+      const go=await askSale(list.reduce((a,x)=>a+x.v,0),`${list.length} گاہکوں کو بقایا کا SMS جائے گا — کل ${parts} SMS، آپ کی سم سے۔ پہلی بار فون SMS بھیجنے کی اجازت مانگے گا، "اجازت دیں" دبائیں۔`,{title:`${list.length} گاہکوں کو SMS بھیجیں؟`,yes:"ہاں، سب کو بھیجیں",no:"نہیں",cls:"sms"});
+      if(go)rmSendAllSms(list);return}
     RQ={via:ds.rmgo==="wa"?"wa":"sms",list,i:0};rmOpenNext();return}
   if("rmsmsyes" in ds){rmSendAllSms(rmCands().filter(x=>S.rmSel.has(x.c.id)&&x.ph));return}
   if("rmnext" in ds){rmOpenNext();return}
@@ -1722,6 +1746,7 @@ document.addEventListener("change",e=>{
   if(t.dataset.bsel!==undefined){S.bulk[+t.dataset.bsel].sel=t.checked;renderBulk()}
   if(t.id==="bulkAll"){S.bulk.forEach(r=>r.sel=t.checked);renderBulk()}
   if(t.dataset.bf&&t.tagName==="SELECT"){const [i,f]=t.dataset.bf.split(":");S.bulk[+i][f]=t.value}
+  if(t.dataset.exptog){const id=t.dataset.exptog;setExpLink(id,t.checked).then(ok=>{if(!ok){t.checked=!t.checked;return}toast(t.checked?"خرچے میں شامل کر دی":"خرچے سے نکال دی");sheetEntryView(id)});return}
   if(t.dataset.tilltog){const [k,id]=t.dataset.tilltog.split(":"),vw=S.view||{},viewId=vw.id;
     setTillSale(k,id,t.checked).then(ok=>{if(!ok){t.checked=!t.checked;return}toast(t.checked?"سیل میں شامل کر دی":"سیل سے نکال دی");
       // stay on the window that was open; if it was the income row that just got removed, show the payment instead
