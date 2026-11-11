@@ -5,6 +5,8 @@ import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, pa
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar, canDirectSms, sendSmsDirect } from "./native.js";
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
+import { App as CapApp } from "@capacitor/app";
+import { cameraOpen, closeCamera } from "./scan.js";
 import { saveBinary } from "./native.js";
 
 const $=s=>document.querySelector(s);
@@ -569,7 +571,7 @@ function vBranch(){
 
 /* ---------- sheets ---------- */
 function openSheet(title,body){const sh=$("#sheet");sh.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}" dir="rtl" lang="ur"><div class="sheet-h"><h3>${esc(title)}</h3><button class="x" data-close aria-label="بند کریں">×</button></div>${body}</div>`;sh.hidden=false;const f=sh.querySelector("input,select,textarea");if(f)setTimeout(()=>f.focus(),30);fillNames()}
-function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.supPay=false;S.openItem=null;S.afterCust=null}
+function closeSheet(){$("#sheet").hidden=true;$("#sheet").innerHTML="";S.openCust=null;S.supPay=false;S.view=null;S.openItem=null;S.afterCust=null}
 function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
 const branchOptions=(sel)=>S.branches.map(b=>`<option value="${esc(b.id)}" ${sel===b.id?"selected":""}>${esc(b.name)}</option>`).join("");
 const defBranch=()=>S.branch!=="all"?S.branch:(S.branches[0]||{}).id||"";
@@ -860,7 +862,7 @@ function sheetCust(id){
    ${c.kind!=="supplier"&&v>0?payBoxHtml():""}
    <div class="qr-row" id="custQr"></div>
    ${rows.length?`<div class="led"><div class="led-row hd"><span>تفصیل</span><span style="text-align:end">دیے / ملے</span><span style="text-align:end">بقایا</span></div>
-   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}${c.kind==="supplier"&&e.type==="gave"?tillTag("e",e.id)+expTag(e.id):""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
+   ${rows.map(e=>`<div class="led-row clickable" data-entv="${esc(e.id)}" role="button" tabindex="0"><div style="min-width:0"><div>${(e.att||[]).length?`<span class="pill clip">${CLIP_ICON} ${(e.att||[]).length}</span> `:""}${esc(e.note||(c.kind==="supplier"?(e.type==="gave"?"ادائیگی کی":"مال خریدا"):(e.type==="gave"?"ادھار دیا":"رقم ملی")))}${e.sale&&S.sales.some(x=>x.id===e.sale)?` <button class="btn sm bill-link" data-salev="${esc(e.sale)}">${PDF_ICON} بل</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?` <button class="btn sm bill-link" data-purv="${esc(e.purchase)}">${PDF_ICON} بل</button>`:""}${c.kind==="supplier"&&e.type==="gave"?tillTag("e",e.id)+expTag(e.id):""}</div><div class="meta"><span class="num">${dstr(e.date)}</span>${e.byName?` · ${esc(e.byName)}`:""}${S.isAdmin?` · <button class="btn ghost sm" style="padding:0 4px" data-delentry="${esc(e.id)}">حذف</button>${!e.sale&&!e.purchase?` · <button class="btn ghost sm" style="padding:0 4px" data-editentry="${esc(e.id)}">ترمیم</button>`:""}`:""}</div><div id="del_${esc(e.id)}"></div></div><span class="n ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fq(e.amount)}</span><span class="n">${fq(e.run)}</span></div>`).join("")}</div>`
    :`<div class="empty">ابھی کوئی لین دین نہیں۔ اوپر کے بٹن سے پہلا اندراج کریں۔</div>`}
    ${rows.length?`<p class="note" style="margin:8px 0 0">کسی اندراج پر کلک کریں تو اس کی تفصیل اور بل کی تصویر دیکھ یا لگا سکتے ہیں۔</p>`:""}
   `);
@@ -1027,6 +1029,31 @@ function supPayForm(sid,amt){
   box.innerHTML=entryFormHtml("gave");
   if(S.cashDate){const d=$("#eDate");if(d){d.value=S.cashDate;document.querySelectorAll('[data-dset="eDate"]').forEach(b=>b.setAttribute("aria-pressed",b.dataset.d===S.cashDate))}}
   const v=balances()[sid]||0,a=$("#eAmt");if(a){a.value=amt?String(amt):"";a.placeholder=v<0?"باقی "+fq(-v):"";a.focus()}
+}
+/* change a saved ledger entry: the same form, filled in */
+function editEntry(id){
+  let e=S.entries.find(x=>x.id===id);if(!e)return;
+  if(e.discFor&&S.entries.some(x=>x.id===e.discFor))e=S.entries.find(x=>x.id===e.discFor);
+  if(e.exp){const x=S.expenses.find(v=>v.id===e.exp);if(x){sheetExpense(x.dir==="in"?"in":"out",x);return}}
+  if(e.sale||e.purchase){toast("یہ اندراج بل سے بنا ہے، بل کھول کر بدلیں");return}
+  sheetCust(e.cust);S.photos=[];
+  const box=$("#entryForm");if(!box)return;
+  S.retLines=e.gk==="ret"?structuredClone(e.lines||[]):[];
+  box.innerHTML=entryFormHtml(e.type);
+  const f=box.querySelector("form");f.dataset.edit=e.id;
+  const set=(sel,v)=>{const el=$(sel);if(el)el.value=v};
+  set("#eAmt",String(e.amount||""));set("#eDate",ymd(e.date));
+  document.querySelectorAll('[data-dset="eDate"]').forEach(b=>b.setAttribute("aria-pressed",b.dataset.d===ymd(e.date)));
+  let note=String(e.note||"");if(e.gk&&GK_LABEL[e.gk]&&note.startsWith(GK_LABEL[e.gk]))note=note.slice(GK_LABEL[e.gk].length).replace(/^ · /,"");set("#eNote",note);
+  if(e.gk==="ret"){const b=f.querySelector('[data-gk="ret"]');if(b)b.click()}
+  if(e.src){const b=f.querySelector(`[data-src="${e.src}"]`);if(b)b.click()}
+  const dsc=S.entries.find(x=>x.discFor===e.id);
+  {const di=$("#eDisc");if(di&&e.type==="got")di.dataset.bal=String((Number(di.dataset.bal)||0)+(Number(e.amount)||0)+(dsc?Number(dsc.amount)||0:0))}
+  if(dsc){set("#eDisc",String(dsc.amount));syncDisc()}
+  if(e.gk==="disc"&&!e.discFor){set("#eAmt","0");set("#eDisc",String(e.amount));syncDisc()}
+  const sv=f.querySelector(".actions button:not([type=button])");if(sv)sv.textContent="تبدیلی محفوظ کریں";
+  f.insertAdjacentHTML("afterbegin",`<p class="note edit-note" style="margin:0 0 8px"><b>اندراج میں ترمیم</b> — محفوظ کرنے پر پرانا اندراج بدل جائے گا۔ سیل / خرچے کے سوال دوبارہ پوچھے جائیں گے اور روزنامچہ، سیل اور اسٹاک ساتھ ٹھیک ہو جائیں گے۔ پرانی تصویریں ساتھ رہیں گی۔</p>`);
+  setTimeout(()=>{f.scrollIntoView({block:"start",behavior:"smooth"});$("#eAmt").focus()},60);
 }
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
@@ -1263,7 +1290,7 @@ function sheetEntryView(id){
     ${S.canWrite&&att.length<MAX_PHOTOS?(S.photos=[],`<form class="f" data-form="addphoto" data-col="entries" data-id="${esc(e.id)}" style="margin-top:12px">${photoPicker()}<div class="actions"><button class="btn primary">تصویر محفوظ کریں</button></div></form>`):""}
     ${e.exp&&S.expenses.some(x=>x.id===e.exp)?`<div class="actions" style="margin-top:12px">${S.isAdmin?`<button type="button" class="btn sm primary" data-expedit="${esc(e.exp)}">✎ اس خرچے میں ترمیم کریں</button>`:""}<button type="button" class="btn sm" data-expv-btn="${esc(e.exp)}">روزنامچہ والا خرچہ دیکھیں</button></div>`:""}
     ${dateEditHtml("entries",e)}
-    ${S.isAdmin&&!e.sale&&!e.purchase?`<div class="actions" style="margin-top:14px"><button class="btn ghost sm" data-delentry="${esc(e.id)}">یہ اندراج حذف کریں</button></div><div id="del_${esc(e.id)}"></div>`:""}
+    ${S.isAdmin&&!e.sale&&!e.purchase?`<div class="actions" style="margin-top:14px"><button class="btn primary sm" data-editentry="${esc(e.id)}">✎ ترمیم کریں</button><button class="btn ghost sm" data-delentry="${esc(e.id)}">یہ اندراج حذف کریں</button></div><div id="del_${esc(e.id)}"></div>`:""}
     <div class="actions" style="margin-top:14px">${e.sale&&S.sales.some(x=>x.id===e.sale)?`<button class="btn primary" data-salev="${esc(e.sale)}">${PDF_ICON} بل کھولیں (QR / PDF / پرنٹ)</button>`:e.purchase&&S.purchases.some(x=>x.id===e.purchase)?`<button class="btn primary" data-purv="${esc(e.purchase)}">${PDF_ICON} بل کھولیں</button>`:""}<button class="btn" data-backcust="${esc(e.cust)}">← کھاتے پر واپس</button></div>`);
   for(const a of att)loadAtt(a);
 }
@@ -1431,8 +1458,15 @@ document.addEventListener("submit",async ev=>{
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
     const dc=(!d.gk||d.gk==="pay")?num(d.disc):0;
     if(amt<=0&&!(dc>0)){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
-    const dt=d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
-    const att=savePhotos({kind:"entry",cust:S.openCust}),eid=newId("entries");
+    const old=f.dataset.edit?S.entries.find(x=>x.id===f.dataset.edit):null;
+    const dt=old&&d.date?withDate(old.date,d.date):d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
+    const newAtt=savePhotos({kind:"entry",cust:S.openCust}),att=[...((old&&old.att)||[]),...newAtt].slice(0,MAX_PHOTOS),eid=old?old.id:newId("entries");
+    // editing: the old linked rows (till sale, own pocket, expense, discount, returned stock) are rebuilt from the new answers
+    const pre=[];
+    if(old){for(const x of S.expenses)if(x.payFor===old.id||x.expFor===old.id)pre.push({op:"update",col:"expenses",id:x.id,data:{del:true}});
+      for(const x of S.entries)if(x.discFor===old.id)pre.push({op:"update",col:"entries",id:x.id,data:{del:true}});
+      if(old.gk==="ret")for(const l of old.lines||[])if(S.items.some(x=>x.id===l.item))pre.push({op:"stock",id:l.item,branch:old.stockBranch||old.branch||defBranch(),delta:-l.qty});}
+    const keepBy=old?{by:old.by||"",byName:old.byName||"",editedBy:me.name||"",editedAt:Date.now()}:{};
     const gk=d.gk&&d.gk!=="pay"?d.gk:"";
     const src=gk||amt<=0?"":d.src||"";if(src){try{localStorage.setItem("wb_src_"+($("#eSrc").dataset.k),src)}catch(e){}}
     const nm=(c&&c.name)||"";
@@ -1450,16 +1484,17 @@ document.addEventListener("submit",async ev=>{
     const note=gk?GK_LABEL[gk]+(d.note.trim()?" · "+d.note.trim():""):d.note.trim();
     const rl=gk==="ret"?(S.retLines||[]).filter(l=>l.qty>0&&S.items.some(x=>x.id===l.item)):[];
     const rb=(c&&c.branch&&S.branches.some(b=>b.id===c.branch))?c.branch:defBranch();
-    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...(rl.length?{lines:rl,stockBranch:rb}:{}),...by()}}];
+    const ops=[{op:"set",col:"entries",id:eid,data:{cust:S.openCust,type:f.dataset.type,amount:amt,att,note,date:dt,branch:c?c.branch:"",...(src?{src}:{}),...(gk?{gk}:{}),...(src==="cash"||src==="bank"?{inSale}:{}),...(rl.length?{lines:rl,stockBranch:rb}:{}),...by(),...keepBy}}];
     for(const l of rl)ops.push({op:"stock",id:l.item,branch:rb,delta:l.qty});
     if(dc>0){const dnote="ڈسکاؤنٹ / چھوٹ"+(amt>0?" (وصولی "+fmt(amt)+" کے ساتھ)":"")+(d.note.trim()?" · "+d.note.trim():"");
       const de={op:"set",col:"entries",id:newId("entries"),data:{cust:S.openCust,type:"got",amount:dc,gk:"disc",att:[],note:dnote,date:dt+1,branch:c?c.branch:"",...(amt>0?{discFor:eid}:{}),...by()}};
-      if(amt>0)ops.push(de);else{de.data.att=att;ops.splice(0,1,de)}}
+      if(amt>0)ops.push(de);else{de.data.att=att;if(old){de.id=eid;Object.assign(de.data,keepBy)}ops.splice(0,1,de)}}
     if(supE){ops[0].data.inExp=!!inExp;if(inExp)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:expForData(ops[0].data,eid,nm)})}
     if(src==="till"&&inSale)ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:true,pl:true,att:[],note:"گلّے کی سیل · ادائیگی "+nm,date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
     if(src==="own")ops.push({op:"set",col:"expenses",id:newId("expenses"),data:{amount:amt,dir:"in",sale:false,pl:false,att:[],note:OWNER_IN+" · ادائیگی "+nm+" کے لیے",date:dt-1,branch:c?c.branch:"",payFor:eid,...by()}});
-    ok=await w(()=>db.batch(ops));
-    if(ok&&att.length)replaceOldPhotos(S.openCust,eid);
+    ok=await w(()=>db.batch([...pre,...ops]));
+    if(ok&&newAtt.length)replaceOldPhotos(S.openCust,eid);
+    if(ok&&old){toast("تبدیلی محفوظ");S.retLines=[];sheetCust(S.openCust);if(btn)btn.disabled=false;return}
     if(ok&&S.supPay){S.supPay=false;closeSheet();toast("ادائیگی محفوظ · سپلائر کے کھاتے اور روزنامچہ دونوں میں");render()}
     else if(ok){toast(rl.length?"واپسی محفوظ · مال اسٹاک میں جڑ گیا":dc>0?"وصولی اور چھوٹ محفوظ":"اندراج محفوظ");S.retLines=[];sheetCust(S.openCust)}
   }
@@ -1675,6 +1710,7 @@ document.addEventListener("click",async ev=>{
   if(ds.rrm!==undefined){S.retLines.splice(+ds.rrm,1);renderRet();syncRetAmt();return}
   if(ds.entry){S.photos=[];S.retLines=[];$("#entryForm").innerHTML=entryFormHtml(ds.entry);$("#eAmt").focus();return}
   if("cancelentry" in ds){if(S.supPay){S.supPay=false;closeSheet();return}$("#entryForm").innerHTML="";return}
+  if(ds.editentry){editEntry(ds.editentry);return}
   if(ds.delentry){const box=document.querySelector("#sheet #del_"+CSS.escape(ds.delentry))||$("#del_"+CSS.escape(ds.delentry));if(box)box.innerHTML=delConfirmHtml("entries",ds.delentry,"یہ اندراج");return}
   if(ds.delyes){const id=ds.delyes,de=S.entries.find(x=>x.id===id);if(await w(()=>{db.remove("entries",id);
     if(de&&de.gk==="ret"&&(de.lines||[]).length)db.batch(de.lines.filter(l=>S.items.some(x=>x.id===l.item)).map(l=>({op:"stock",id:l.item,branch:de.stockBranch||de.branch||defBranch(),delta:-l.qty})));for(const x of S.expenses.filter(x=>x.payFor===id))db.remove("expenses",x.id);for(const x of S.entries.filter(x=>x.discFor===id))db.remove("entries",x.id)})){toast("حذف ہو گیا");sheetCust(S.openCust)}return}
@@ -1799,3 +1835,20 @@ initPay({S,esc,fmt,toast,openSheet,closeSheet,$,render,savePayAccounts});bindPay
 initBarcode({S,esc,fmt,fq,toast,openSheet,closeSheet,render,db,w,stockOf,itemSizes,branchName,branchOptions,defBranch,saveBinary,shopTitle,sheetItemForm,sheetItem,addSaleLine,addPurchLine});
 import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSync,stopSync,setErrorHandler,authApi,shopInfo,watchMe,createShop,requestAccess,setRole,saveFile,setPayAccounts}));
 export {S};
+/* phone's back button (Android app): close what is open, step back, and only then leave the app */
+function goBack(){
+  const ask=$("#askSale");if(ask){const b=ask.querySelector('[data-a=""]');if(b)b.click();else ask.remove();return true}
+  if(cameraOpen()){closeCamera();return true}
+  const z=document.querySelector("img.zoom");if(z){z.click();return true}
+  const lk=document.getElementById("lock");if(lk&&!lk.hidden&&lk.offsetParent!==null)return false;
+  const sh=$("#sheet");
+  if(sh&&!sh.hidden){
+    const ef=$("#entryForm");if(ef&&ef.innerHTML.trim()&&!S.supPay&&S.openCust){ef.innerHTML="";S.retLines=[];return true}
+    const v=S.view||{},from=v.col==="entries"&&S.entries.find(x=>x.id===v.id);
+    if(from&&!S.openCust&&S.customers.some(c=>c.id===from.cust)){S.view=null;sheetCust(from.cust);return true}
+    closeSheet();return true}
+  if(S.tab!=="home"){S.tab="home";render();window.scrollTo(0,0);return true}
+  return false;
+}
+if(isNative)CapApp.addListener("backButton",()=>{if(!goBack())CapApp.minimizeApp()});
+
