@@ -6,6 +6,7 @@ import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage,
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
 import { App as CapApp } from "@capacitor/app";
+import { Keyboard } from "@capacitor/keyboard";
 import { cameraOpen, closeCamera } from "./scan.js";
 import { saveBinary } from "./native.js";
 
@@ -1851,4 +1852,17 @@ function goBack(){
   return false;
 }
 if(isNative)CapApp.addListener("backButton",()=>{if(!goBack())CapApp.minimizeApp()});
+/* the on-screen keyboard covers the bottom of the app (Android draws edge to edge), so make room for it and keep
+   the field being typed in — and a search's results — in view. While searching, the bottom tabs and the tall
+   header step aside. */
+function kbSet(h){document.body.style.setProperty("--kb",Math.max(0,h|0)+"px");document.body.classList.toggle("kb",h>0);if(h>0)setTimeout(keepTypingVisible,80)}
+function keepTypingVisible(){
+  const a=document.activeElement;if(!a||!/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
+  if(a.type==="search"&&!a.closest("#sheet")){const r=a.getBoundingClientRect();if(r.top<4||r.top>90)window.scrollBy({top:r.top-10,behavior:"smooth"});return}
+  a.scrollIntoView({block:"center",behavior:"smooth"});
+}
+if(isNative){try{Keyboard.addListener("keyboardWillShow",i=>kbSet(i.keyboardHeight||0));Keyboard.addListener("keyboardWillHide",()=>kbSet(0))}catch(e){}}
+else if(window.visualViewport){const vv=window.visualViewport;vv.addEventListener("resize",()=>{const h=window.innerHeight-vv.height;kbSet(h>120?h:0)})}
+document.addEventListener("focusin",e=>{const t=e.target;if(t&&t.type==="search"&&!t.closest("#sheet")){document.body.classList.add("typing");setTimeout(keepTypingVisible,250)}});
+document.addEventListener("focusout",()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.type==="search"))document.body.classList.remove("typing")},150));
 

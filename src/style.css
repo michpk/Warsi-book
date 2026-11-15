@@ -570,3 +570,11 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .rm-prog.done{background:var(--pay-bg);color:var(--pay);font-weight:600}
 .rm-prog.bad{background:var(--owe-bg);color:var(--owe)}
 .rm-actions #rmProg{grid-column:1/-1}.rm-actions #rmProg:empty{display:none}.rm-actions .rm-prog{margin-top:0}
+/* keyboard open / searching (phones) */
+body.kb{padding-bottom:var(--kb,0px)}
+body.kb #sheet{bottom:var(--kb,0px)}
+@media (max-width:859px){
+  body.kb nav.tabs,body.typing nav.tabs{display:none}
+  body.typing header.top{position:relative}
+  body.typing main::after{content:"";display:block;flex:none;height:75vh}
+}
