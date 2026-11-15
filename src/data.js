@@ -75,14 +75,32 @@ export function list(col) {
 }
 export function newId(col) { return doc(collection(fs, col)).id; }
 
+/* change history and the recycle bin: every write is reported to a logger (set by the app), and a
+   soft delete remembers when and by whom so it can be undone from "حذف شدہ" */
+let logger = null, who = "";
+export function setLogger(fn, name) { logger = fn; who = name || ""; }
+const stampDel = d => (d && d.del === true && !d.delAt) ? { ...d, delAt: Date.now(), delBy: typeof who === "function" ? who() : who } : d;
+export const peek = (col, id) => (M[col] && M[col].get(id)) || null;
+const report = ops => { if (logger) try { logger(ops); } catch (e) { console.error(e); } };
+export function listDeleted(col) {
+  const m = M[col]; if (!m) return [];
+  const out = []; for (const [id, d] of m) if (d.del) out.push({ id, ...d });
+  return out;
+}
 export const db = {
   set(col, id, data) {
     data = clean(data); localPut(col, id, data, false); emit();
     fire(setDoc(doc(fs, col, id), { ...data, u: serverTimestamp() }));
+    report([{ op: "set", col, id, data }]);
+  },
+  // for the history log: never bothers the user if it fails
+  setQuiet(col, id, data) {
+    data = clean(data); localPut(col, id, data, false);
+    setDoc(doc(fs, col, id), { ...data, u: serverTimestamp() }).catch(e => console.warn(col, e && e.code));
   },
   add(col, data) { const id = newId(col); this.set(col, id, data); return id; },
   update(col, id, data) {
-    data = clean(data); localPut(col, id, data, true); emit();
+    data = stampDel(clean(data)); localPut(col, id, data, true); emit(); report([{ op: "update", col, id, data }]);
     fire(updateDoc(doc(fs, col, id), { ...flatten(data), u: serverTimestamp() }));
   },
   remove(col, id) { this.update(col, id, { del: true }); },
@@ -98,7 +116,7 @@ export const db = {
     const b = writeBatch(fs);
     for (const o of ops) {
       if (o.op === "set") { const d = clean(o.data); localPut(o.col, o.id, d, false); b.set(doc(fs, o.col, o.id), { ...d, u: serverTimestamp() }); }
-      if (o.op === "update") { const d = clean(o.data); localPut(o.col, o.id, d, true); b.update(doc(fs, o.col, o.id), { ...flatten(d), u: serverTimestamp() }); }
+      if (o.op === "update") { const d = stampDel(clean(o.data)); localPut(o.col, o.id, d, true); b.update(doc(fs, o.col, o.id), { ...flatten(d), u: serverTimestamp() }); }
       if (o.op === "stock") {
         const it = M.items && M.items.get(o.id); const cur = Number(((it || {}).stock || {})[o.branch]) || 0;
         const extra = clean(o.extra || {});
@@ -106,7 +124,7 @@ export const db = {
         b.update(doc(fs, "items", o.id), { ["stock." + o.branch]: increment(o.delta), ...flatten(extra), u: serverTimestamp() });
       }
     }
-    emit(); fire(b.commit());
+    emit(); fire(b.commit()); report(ops);
   },
   // bulk import: raw set without optimistic render per doc, chunks of 400
   async importAll(byCol, progress) {
@@ -161,6 +179,9 @@ export async function shopInfo() {
   try { const s = await getDoc(doc(fs, "meta", "shop")); return s.exists() ? s.data() : null; } catch (e) { return null; }
 }
 // Shop payment accounts live on the shop document (only the owner may change it).
+export function saveShop(fields) {
+  return updateDoc(doc(fs, "meta", "shop"), fields).catch(e => { console.error(e); throw e; });
+}
 export function savePayAccounts(list) {
   return updateDoc(doc(fs, "meta", "shop"), { pay: list }).catch(e => { console.error(e); throw e; });
 }

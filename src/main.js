@@ -1,5 +1,5 @@
 import "./style.css";
-import { extraOk, configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
+import { extraOk, setLogger, listDeleted, peek, saveShop, configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
 import { initBarcode, scanBtn, itemCodesHtml, collectCodes, codesOf, findCode, sheetCount, sheetLabels, SCAN_ICON } from "./barcode.js";
 import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts, payAccounts } from "./pay.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar, canDirectSms, sendSmsDirect } from "./native.js";
@@ -45,7 +45,10 @@ function balances(){const m={};for(const e of S.entries){m[e.cust]=(m[e.cust]||0
 const todayStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const ymd=t=>new Date(t-new Date(t).getTimezoneOffset()*6e4).toISOString().slice(0,10);
 /* date picker with quick "today / yesterday / day before" buttons, for entering old records */
+/* owner's limits for staff (برانچیں › ملازم کی حدیں) */
+const lim=k=>!S.isAdmin&&!!(S.limits&&S.limits[k]);
 function dateField(id,name,value){
+  if(lim("noBackdate"))return `<input id="${id}" name="${name}" type="date" dir="ltr" class="date-in" value="${todayStr()}" min="${todayStr()}" max="${todayStr()}" readonly><p class="note" style="margin:2px 0 0">ملازم صرف آج کی تاریخ سے اندراج کر سکتا ہے۔</p>`;
   const d=k=>ymd(Date.now()-k*864e5);
   return `<input id="${id}" name="${name}" type="date" dir="ltr" class="date-in" value="${value}" max="${todayStr()}">
     <div class="date-quick">${[["آج",0],["کل",1],["پرسوں",2]].map(([l,k])=>`<button type="button" data-dset="${id}" data-d="${d(k)}" aria-pressed="${value===d(k)}">${l}</button>`).join("")}<button type="button" data-dstep="${id}" data-k="-1" aria-label="ایک دن پیچھے">− 1 دن</button></div>`;
@@ -60,6 +63,7 @@ function expEditHtml(x){
   return `<div class="actions" style="margin-top:12px"><button type="button" class="btn primary" data-expedit="${esc(target)}">✎ ترمیم کریں</button></div>`;
 }
 function dateEditHtml(col,x){
+  if(lim("noBackdate"))return "";
   if(!S.isAdmin)return "";
   return `<form class="f date-edit" data-form="redate" data-col="${col}" data-id="${esc(x.id)}"><label for="rdDate" class="lbl-sm">تاریخ بدلیں</label>${dateField("rdDate","date",ymd(x.date))}<div class="actions"><button class="btn sm primary">نئی تاریخ محفوظ کریں</button></div></form>`;
 }
@@ -114,7 +118,8 @@ const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s)
 
 /* ---------- render shell ---------- */
 function renderTabs(){
-  $("#tabs").innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" ${S.tab===k?'aria-current="page"':""}>${ICON[k]}<span>${l}</span></button>`).join("");
+  if(S.tab==="report"&&lim("noReports"))S.tab="home";
+  $("#tabs").innerHTML=TABS.filter(([k])=>!(k==="report"&&lim("noReports"))).map(([k,l])=>`<button data-tab="${k}" ${S.tab===k?'aria-current="page"':""}>${ICON[k]}<span>${l}</span></button>`).join("");
 }
 function renderBranchSel(){
   const sel=$("#branchSel");
@@ -175,7 +180,7 @@ function vHome(){
     <div class="dh-foot">
       <button data-go="cash"><span>آج کا خرچ</span><b class="owe-t">${cnt(expToday)}</b></button>
       <button data-go="cash"><span>گلّے میں کیش</span><b>${cnt(tillNow)}</b></button>
-      <button data-go="report"><span>اس ماہ منافع</span><b>${cnt(profit)}</b></button>
+      ${lim("noReports")?"":`<button data-go="report"><span>اس ماہ منافع</span><b>${cnt(profit)}</b></button>`}
     </div>
   </section>
   ${S.canWrite?`<div class="quick">
@@ -583,6 +588,15 @@ function vBranch(){
   :`<div class="card empty"><strong>کوئی برانچ نہیں</strong><span>اپنی دکان کو پہلی برانچ کے طور پر شامل کریں۔</span>${S.isAdmin?`<button class="btn primary" data-act="newBranch">+ برانچ بنائیں</button>`:""}</div>`}
   ${payCardHtml()}
   <section class="card pad" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><h3 style="margin:0;font-size:15px">🧾 رسید پرنٹر (بلوٹوتھ)</h3><div class="note">${(()=>{const c=printerConf();return c.address?`${esc(c.name||c.address)} · ${c.width} ملی میٹر${c.auto?" · بل پر خود پرنٹ":""}`:isNative?"ابھی کوئی پرنٹر نہیں چنا":"ویب سائٹ پر رسید عام پرنٹر سے نکلتی ہے"})()}</div></div><button class="btn sm primary" data-act="printer">پرنٹر سیٹ کریں</button></section>
+  ${S.isAdmin?`<section class="card"><div class="card-h"><h3>🛡 حفاظت اور بیک اپ</h3></div><div class="pad" style="display:flex;flex-direction:column;gap:10px">
+    <div class="safe-btns"><button class="btn" data-act="history">🕘 تبدیلیوں کی تاریخ</button><button class="btn" data-act="bin">🗑 حذف شدہ اندراجات</button><button class="btn" data-backup="json">💾 بیک اپ (پورا ڈیٹا)</button><button class="btn" data-backup="xlsx">${XL_ICON} Excel میں سب</button></div>
+    <p class="note" style="margin:0">${isNative?"موبائل ایپ ہر ہفتے خود بھی فون میں بیک اپ رکھتی ہے (Documents/WarsiBook)۔ ":""}بیک اپ فائل Gmail / Google Drive / واٹس ایپ پر بھیج کر محفوظ کر لیں۔ ضرورت پڑے تو اسی فائل سے ڈیٹا واپس لایا جا سکتا ہے۔${(()=>{let t=0;try{t=+localStorage.getItem("wb_backup_at")||0}catch(e){}return t?` آخری بیک اپ: <span class="num">${new Date(t).toLocaleDateString("en-GB")}</span>`:""})()}</p>
+    ${S.isOwner?`<form class="f" data-form="limits" style="border-top:1px solid var(--line);padding-top:10px"><h4 style="margin:0;font-size:14px">ملازم کی حدیں</h4>
+      <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="noReports" ${S.limits&&S.limits.noReports?"checked":""}> ملازم رپورٹس اور منافع نہ دیکھ سکے</label>
+      <label class="note" style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="noBackdate" ${S.limits&&S.limits.noBackdate?"checked":""}> ملازم پرانی تاریخ سے اندراج نہ کر سکے (صرف آج)</label>
+      <div class="fld"><label for="limDisc" class="note">ملازم زیادہ سے زیادہ کتنی چھوٹ دے سکے (خالی = کوئی حد نہیں)</label><input id="limDisc" name="maxDisc" class="num" inputmode="decimal" value="${esc((S.limits&&S.limits.maxDisc)||"")}" placeholder="مثلاً 500"></div>
+      <div class="actions"><button class="btn sm primary">حدیں محفوظ کریں</button></div><p class="note" style="margin:0">ترمیم اور حذف پہلے ہی صرف مالک / مینیجر کر سکتے ہیں۔</p></form>`:""}
+  </div></section>`:""}
   <div id="teamBox"></div>`;
 }
 
@@ -1175,6 +1189,87 @@ function orderText(sup){
   const ids=Object.keys(S.order||{}).filter(id=>S.order[id]>0&&S.items.some(i=>i.id===id));
   return `السلام علیکم ${sup?sup.name:""}،\nبراہ کرم یہ مال بھیج دیں:\n\n`+ids.map((id,n)=>{const it=S.items.find(i=>i.id===id);return `${n+1}. ${it.name} — ${fq(S.order[id])} ${it.buyUnit||it.unit||""}`}).join("\n")+`\n\nشکریہ${shopLine()}`;
 }
+/* ---------- change history ---------- */
+const COL_UR={entries:"کھاتہ",expenses:"روزنامچہ",sales:"بل",purchases:"خریداری",items:"اسٹاک",customers:"گاہک / سپلائر",branches:"برانچ",closings:"دن بند",users:"ملازم"};
+function recSum(col,r){
+  if(!r)return "";
+  const cn=id=>(S.customers.find(c=>c.id===id)||peek("customers",id)||{}).name||"";
+  if(col==="entries")return `${cn(r.cust)} · ${r.type==="gave"?"دیے":"ملے"} ${fq(r.amount)}${r.note?" · "+r.note:""}`;
+  if(col==="expenses")return `${r.dir==="in"?"آمد":"خرچہ"} ${fq(r.amount)} · ${r.note||""}`;
+  if(col==="sales"||col==="purchases")return `#${r.no} · ${r.custName||r.suppName||""} · ${fq(r.total)}`;
+  if(col==="items")return r.name||"";
+  if(col==="customers")return r.name||"";
+  if(col==="closings")return `${r.day} · گنا ${fq(r.counted)}`;
+  return "";
+}
+function logOps(ops){
+  if(!me.uid||!extraOk())return;
+  const L=ops.filter(o=>o.op!=="stock"&&!["logs","calc","users"].includes(o.col));if(!L.length)return;
+  const o=L[0],r=peek(o.col,o.id)||o.data||{};
+  const act=o.data&&o.data.del===true?"حذف":o.data&&o.data.del===false?"بحال":o.op==="set"?(o.data&&o.data.editedBy?"ترمیم":"نیا"):"تبدیلی";
+  db.setQuiet("logs",newId("logs"),{by:me.uid,byName:me.name||"",at:Date.now(),col:o.col,rid:o.id,act,sum:recSum(o.col,r).slice(0,160),n:L.length});
+}
+setLogger(logOps,()=>me.name||"");
+function sheetHistory(who){
+  const L=[...(S.logs||[])].sort((a,b)=>b.at-a.at),people=[...new Set(L.map(x=>x.byName).filter(Boolean))];
+  const rows=(who?L.filter(x=>x.byName===who):L).slice(0,300);
+  openSheet("تبدیلیوں کی تاریخ",`
+    ${extraOk()?"":`<p class="warn">یہ سہولت Firebase کے نئے رولز Publish ہونے کے بعد چلے گی۔</p>`}
+    <div class="chips"><button class="chip" data-hist="" aria-pressed="${!who}">سب</button>${people.map(n=>`<button class="chip" data-hist="${esc(n)}" aria-pressed="${who===n}">${esc(n)}</button>`).join("")}</div>
+    ${rows.length?`<div class="led" style="margin-top:8px">${rows.map(x=>`<div class="led-row clickable" data-histopen="${esc(x.col)}:${esc(x.rid)}" style="grid-template-columns:minmax(0,1fr) auto"><div style="min-width:0"><div><span class="pill ${x.act==="حذف"?"owe":x.act==="نیا"?"pay":"warn"}">${esc(x.act)}</span> <b>${esc(COL_UR[x.col]||x.col)}</b> · ${esc(x.sum||"")}${x.n>1?` <span class="note">(+${x.n-1} جڑے)</span>`:""}</div><div class="meta">${esc(x.byName||"")} · <span class="num">${new Date(x.at).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</span></div></div></div>`).join("")}</div>`:`<div class="empty">ابھی کوئی تبدیلی درج نہیں۔ اب سے ہر نیا اندراج، ترمیم اور حذف یہاں لکھا جائے گا۔</div>`}`);
+}
+/* ---------- recycle bin ---------- */
+const BIN_COLS=["entries","expenses","customers","items"];
+function binGroups(){
+  const all=[];for(const c of BIN_COLS)for(const r of listDeleted(c))all.push({c,r});
+  const cut=Date.now()-90*864e5,withT=all.filter(x=>x.r.delAt&&x.r.delAt>=cut).sort((a,b)=>b.r.delAt-a.r.delAt),old=all.filter(x=>!x.r.delAt);
+  const groups=[];for(const x of withT){const g=groups.find(g=>g.by===(x.r.delBy||"")&&Math.abs(g.at-x.r.delAt)<5000);if(g)g.items.push(x);else groups.push({at:x.r.delAt,by:x.r.delBy||"",items:[x]})}
+  return {groups,old};
+}
+function sheetBin(){
+  const {groups,old}=binGroups();S.binGroups=groups;S.binOld=old;
+  const lbl=x=>`<b>${esc(COL_UR[x.c])}</b> · ${esc(recSum(x.c,x.r))}`;
+  openSheet("حذف شدہ اندراجات",`<p class="note" style="margin:0 0 8px">پچھلے 90 دن میں حذف ہوئے اندراجات۔ "بحال کریں" سے وہ اور ان کے ساتھ ایک ہی وقت میں حذف ہوئے جڑے اندراجات واپس آ جاتے ہیں۔</p>
+    ${groups.length?`<div class="list">${groups.map((g,i)=>`<div class="row" style="cursor:default;align-items:flex-start"><div class="main"><div class="s"><span class="num">${new Date(g.at).toLocaleString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</span>${g.by?" · "+esc(g.by):""}</div>${g.items.map(x=>`<div class="t" style="font-weight:400;font-size:14px">${lbl(x)}</div>`).join("")}</div><button class="btn sm primary" data-binrestore="${i}">بحال کریں</button></div>`).join("")}</div>`:`<div class="empty">پچھلے 90 دن میں کچھ حذف نہیں ہوا۔</div>`}
+    ${old.length?`<details style="margin-top:10px"><summary class="note">پرانے حذف شدہ (${old.length}) — ان کا وقت معلوم نہیں</summary><div class="list">${old.slice(0,100).map((x,i)=>`<div class="row" style="cursor:default"><div class="main"><div class="t" style="font-weight:400;font-size:14px">${lbl(x)}</div></div><button class="btn sm" data-binold="${i}">بحال</button></div>`).join("")}</div></details>`:""}`);
+}
+async function binRestore(items){
+  const ops=[];
+  for(const {c,r} of items){ops.push({op:"update",col:c,id:r.id,data:{del:false,delAt:null,delBy:null}});
+    if(c==="entries"&&r.gk==="ret")for(const l of r.lines||[])if(S.items.some(x=>x.id===l.item)||items.some(y=>y.c==="items"&&y.r.id===l.item))ops.push({op:"stock",id:l.item,branch:r.stockBranch||r.branch||defBranch(),delta:Number(l.qty)||0});}
+  if(await w(()=>db.batch(ops))){toast(items.length>1?`${items.length} اندراج بحال ہو گئے`:"بحال ہو گیا");sheetBin()}
+}
+/* ---------- backup ---------- */
+function backupObj(){
+  const o={app:"warsi-book",shop:shopTitle(),at:new Date().toISOString()};
+  for(const c of ["branches","items","customers","entries","sales","purchases","expenses","closings"])o[c]=list(c).map(({u,...r})=>r);
+  return o;
+}
+async function backupNow(kind){
+  const day=todayStr();
+  if(kind==="xlsx"){const bal=balances(),cn=id=>(S.customers.find(c=>c.id===id)||{}).name||"",d=t=>new Date(t).toLocaleString("en-GB");
+    return sheetsToXlsx([
+      {name:"کھاتے",widths:[24,14,10,14],rows:[["نام","فون","قسم","بقایا (+ لینے، − دینے)"],...S.customers.map(c=>[c.name,c.phone||"",c.kind==="supplier"?"سپلائر":"گاہک",Math.round(bal[c.id]||0)])]},
+      {name:"اندراجات",widths:[18,22,8,12,30],rows:[["تاریخ","کھاتہ","قسم","رقم","تفصیل"],...[...S.entries].sort((a,b)=>a.date-b.date).map(e=>[d(e.date),cn(e.cust),e.type==="gave"?"دیے":"ملے",e.amount,e.note||""])]},
+      {name:"بل",widths:[10,18,22,12,12],rows:[["بل","تاریخ","گاہک","کل","نقد"],...[...S.sales].sort((a,b)=>a.date-b.date).map(s=>[s.no,d(s.date),s.custName||"",s.total,s.paid])]},
+      {name:"روزنامچہ",widths:[18,8,12,36],rows:[["تاریخ","قسم","رقم","تفصیل"],...[...S.expenses].sort((a,b)=>a.date-b.date).map(x=>[d(x.date),x.dir==="in"?"آمد":"خرچہ",x.amount,x.note||""])]},
+      {name:"اسٹاک",widths:[28,10,10,10,10],rows:[["چیز","یونٹ","اسٹاک","خرید","فروخت"],...S.items.map(i=>[i.name,i.unit||"",stockOf(i,"all"),i.cost||0,i.sale||0])]}
+    ],"warsi-backup-"+day+".xlsx")}
+  const r=await saveFile("warsi-backup-"+day+".json",JSON.stringify(backupObj()),"application/json");
+  try{localStorage.setItem("wb_backup_at",String(Date.now()))}catch(e){}
+  return r;
+}
+/* once a week the app keeps a copy in the phone itself (Documents/WarsiBook), without asking */
+async function autoBackup(){
+  if(!isNative||!S.isAdmin||!S.loaded.customers||!S.customers.length)return;
+  let last=0;try{last=+localStorage.getItem("wb_backup_auto")||0}catch(e){}
+  if(Date.now()-last<7*864e5)return;
+  try{const { Filesystem, Directory } = await import("@capacitor/filesystem");
+    const b=new TextEncoder().encode(JSON.stringify(backupObj()));let str="";for(let i=0;i<b.length;i+=0x8000)str+=String.fromCharCode(...b.subarray(i,i+0x8000));
+    await Filesystem.writeFile({path:"WarsiBook/backup-"+todayStr()+".json",data:btoa(str),directory:Directory.Documents,recursive:true});
+    localStorage.setItem("wb_backup_auto",String(Date.now()));toast("ہفتہ وار بیک اپ فون میں محفوظ (Documents/WarsiBook)")}catch(e){console.warn("auto backup",e)}
+}
+setTimeout(()=>{autoBackup();setInterval(autoBackup,6*3600e3)},20000);
 /* ---------- thermal receipts ---------- */
 function saleReceiptDoc(s){
   const c=s.cust&&S.customers.find(x=>x.id===s.cust),bal=c?(balances()[c.id]||0):0;
@@ -1620,6 +1715,10 @@ document.addEventListener("submit",async ev=>{
     ok=await w(()=>db.batch(ops));
     if(ok){toast("واپسی محفوظ · "+fmt(amt)+(mode==="cash"?" نقد واپس":" کھاتے سے کم"));sheetSale(rid)}
   }
+  if(kind==="limits"){
+    const limits={noReports:!!d.noReports,noBackdate:!!d.noBackdate,maxDisc:num(d.maxDisc)||0};
+    try{await saveShop({limits});S.limits=limits;ok=true;toast("ملازم کی حدیں محفوظ")}catch(e){toast("محفوظ نہیں ہو سکا")}
+  }
   if(kind==="dayclose"){
     const counted=num(d.counted),expected=Number(f.dataset.exp)||0,day=f.dataset.day,br=S.branch||"all",cid=day+"_"+br,diff=Math.round((counted-expected)*100)/100;
     if(!(d.counted!==""&&counted>=0)){toast("گنا ہوا کیش لکھیں");if(btn)btn.disabled=false;return}
@@ -1660,6 +1759,7 @@ document.addEventListener("submit",async ev=>{
   if(kind==="entry"){
     const c=S.customers.find(x=>x.id===S.openCust);const amt=num(d.amount);
     const dc=(!d.gk||d.gk==="pay")?num(d.disc):0;
+    if(dc>0&&lim("maxDisc")&&dc>num(S.limits.maxDisc)){toast(`ملازم ${fmt(num(S.limits.maxDisc))} سے زیادہ چھوٹ نہیں دے سکتا`);if(btn)btn.disabled=false;return}
     if(amt<=0&&!(dc>0)){toast("رقم درج کریں");if(btn)btn.disabled=false;return}
     const old=f.dataset.edit?S.entries.find(x=>x.id===f.dataset.edit):null;
     const dt=old&&d.date?withDate(old.date,d.date):d.date?new Date(d.date+"T"+new Date().toTimeString().slice(0,8)).getTime():Date.now();
@@ -1890,6 +1990,12 @@ document.addEventListener("click",async ev=>{
   if(ds.act==="remind"){sheetRemind();return}
   if(ds.act==="calc"){openCalc();return}
   if(ds.act==="accounts"){sheetAccounts();return}
+  if(ds.act==="history"){sheetHistory();return}
+  if(ds.hist!==undefined){sheetHistory(ds.hist);return}
+  if(ds.act==="bin"){sheetBin();return}
+  if(ds.binrestore!==undefined){const g=(S.binGroups||[])[+ds.binrestore];if(g)binRestore(g.items);return}
+  if(ds.binold!==undefined){const x=(S.binOld||[])[+ds.binold];if(x)binRestore([x]);return}
+  if(ds.backup){busy(t,()=>backupNow(ds.backup).then(r=>{if(r&&r!=="cancelled")toast("بیک اپ تیار")}));return}
   if(ds.saleret){sheetSaleReturn(ds.saleret);return}
   if(ds.retmode){const i=$("#retMode");if(i)i.value=ds.retmode;document.querySelectorAll("[data-retmode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.retmode===ds.retmode));return}
   if(ds.act==="order"){sheetOrder();return}
@@ -1969,7 +2075,9 @@ document.addEventListener("pointermove",e=>{
   const r=wrap.getBoundingClientRect();tip.textContent=g.dataset.tip;tip.style.left=(e.clientX-r.left+wrap.scrollLeft)+"px";tip.style.top=(e.clientY-r.top)+"px";tip.hidden=false;
   const b=g.querySelector(".bar");if(b)b.classList.add("on");
 });
-document.addEventListener("click",e=>{if(e.target.closest("button,input,label,.confirm"))return;const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
+document.addEventListener("click",e=>{if(e.target.closest("button,input,label,.confirm"))return;
+  const ho=e.target.closest("[data-histopen]");if(ho){const [c,id]=ho.dataset.histopen.split(":");
+    if(c==="entries"&&S.entries.some(x=>x.id===id))sheetEntryView(id);else if(c==="expenses"&&S.expenses.some(x=>x.id===id))sheetExpView(id);else if(c==="sales"&&S.sales.some(x=>x.id===id))sheetSale(id);else if(c==="customers"&&S.customers.some(x=>x.id===id))sheetCust(id);else if(c==="items"&&S.items.some(x=>x.id===id))sheetItem(id);else toast("یہ اندراج اب موجود نہیں (حذف ہو چکا)");return}const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv);const im=e.target.closest("[data-openatt]");if(im)im.classList.toggle("zoom")});
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.closest){const r=e.target.closest("[data-expv]");if(r)sheetExpView(r.dataset.expv);const en=e.target.closest("[data-entv]");if(en)sheetEntryView(en.dataset.entv)}});
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 document.addEventListener("click",e=>{const i=e.target.closest('input[type="date"]');if(i&&i.showPicker){try{i.showPicker()}catch(x){}}});

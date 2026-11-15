@@ -123,7 +123,7 @@ export function boot(ctx) {
       set("who", me.name); set("whoRole", ROLE[prof.role]); set("whoAv", (me.name || "?").trim()[0] || "?");
       const chip = document.getElementById("whoChip"); if (chip) chip.hidden = false;
       try { set("todayStr", new Date().toLocaleDateString("ur-PK", { weekday: "long", day: "numeric", month: "long" })); } catch (e) {}
-      shopInfo().then(sh => { if (sh && sh.name) S.shopName = sh.name; if (sh) { setPayAccounts(sh.pay || []); if (S.tab === "branch") render(); } });
+      shopInfo().then(sh => { if (sh && sh.name) S.shopName = sh.name; if (sh) { S.limits = sh.limits || {}; setPayAccounts(sh.pay || []); render(); if (S.tab === "branch") render(); } });
       if (!started) {
         started = true;
         if (me.branch) { try { if (!localStorage.getItem("hk_branch")) S.branch = me.branch; } catch (e) { S.branch = me.branch; } }

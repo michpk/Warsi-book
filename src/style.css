@@ -590,3 +590,4 @@ body.kb #calcFrame{bottom:var(--kb,0px)}
 .promise-row.late{background:var(--owe-bg);color:var(--owe)}
 .promise-row.done{background:var(--pay-bg);color:var(--pay)}
 .close-card{border:1.5px solid var(--accent)}
+.safe-btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
