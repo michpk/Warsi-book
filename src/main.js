@@ -1,5 +1,5 @@
 import "./style.css";
-import { configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
+import { extraOk, configured, db, list, newId, putAttachment, getAttachment, attachmentId, deleteAttachment, sharedId, putShared, startSync, stopSync, setErrorHandler, authApi, shopInfo, watchMe, createShop, requestAccess, setRole, savePayAccounts } from "./data.js";
 import { initBarcode, scanBtn, itemCodesHtml, collectCodes, codesOf, findCode, sheetCount, sheetLabels, SCAN_ICON } from "./barcode.js";
 import { initPay, bindPayEvents, payBoxHtml, fillPayBox, payPdfHtml, payText, payCardHtml, setPayAccounts } from "./pay.js";
 import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage, compressImage, initStatusBar, canDirectSms, sendSmsDirect } from "./native.js";
@@ -31,7 +31,7 @@ const ICON={
 };
 const TABS=[["home","خلاصہ"],["khata","کھاتے"],["sale","بل"],["cash","روزنامچہ"],["report","رپورٹس"],["stock","اسٹاک"],["branch","برانچیں"]];
 
-const S={branches:[],items:[],customers:[],entries:[],sales:[],purchases:[],expenses:[],contacts:null,billMode:"sale",pcart:[],pSupp:"",pPaid:"",saleMode:"cash",pMode:"cash",saleLedger:true,pLedger:true,shopName:"",updCost:true,cashDate:"",rp:"month",rFrom:"",rTo:"",loaded:{},tab:"home",branch:"all",q:"",stockQ:"",kind:"customer",
+const S={branches:[],items:[],customers:[],entries:[],sales:[],purchases:[],expenses:[],calc:[],closings:[],logs:[],contacts:null,billMode:"sale",pcart:[],pSupp:"",pPaid:"",saleMode:"cash",pMode:"cash",saleLedger:true,pLedger:true,shopName:"",updCost:true,cashDate:"",rp:"month",rFrom:"",rTo:"",loaded:{},tab:"home",branch:"all",q:"",stockQ:"",kind:"customer",
   canWrite:true,isAdmin:false,uid:null,noDb:false,cart:[],saleCust:"",salePaid:""};
 try{S.branch=localStorage.getItem("hk_branch")||"all"}catch(e){}
 S.tab="home"; // always open on the summary tab
@@ -182,6 +182,7 @@ function vHome(){
     <button data-act="newInc"><span class="q-ic in">＋</span>آمد</button>
     <button data-act="newExp"><span class="q-ic out">－</span>خرچہ</button>
     <button data-act="newCust"><span class="q-ic">${ICON.khata}</span>نیا گاہک</button>
+    <button data-act="calc"><span class="q-ic calc-ic">${NAAP_ICON}</span>ناپ کیلکولیٹر</button>
   </div>`:""}
   <button class="card dues" data-go="khata">
     <div class="dues-h"><span><small>گاہکوں سے لینے ہیں</small><b class="c-owe">${cnt(recv)}</b></span><span class="dues-mid">اس ماہ سیل <b class="num">${fmt(monthSale)}</b></span><span class="end"><small>سپلائرز کو دینے ہیں</small><b class="c-pay">${cnt(payb)}</b></span></div>
@@ -1685,6 +1686,7 @@ document.addEventListener("click",async ev=>{
   if("rmnext" in ds){rmOpenNext();return}
   if("rmstop" in ds){if(RQ){clearTimeout(RQ.t);if(RQ.sms)RQ.stop=true;else{const p=$("#rmProg");if(p)p.innerHTML=`<div class="rm-prog done">روک دیا · ${RQ.i} گاہکوں کو کھولا گیا۔</div>`;RQ=null}}return}
   if(ds.act==="remind"){sheetRemind();return}
+  if(ds.act==="calc"){openCalc();return}
   if(ds.act==="supPay"){sheetSupPay();return}
   if(ds.suppay){sheetSupPay(ds.suppay,ds.amt?num(ds.amt):0);return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]+photoLinkText(x[2]));return}
@@ -1838,6 +1840,7 @@ import("./boot.js").then(m=>m.boot({S,me,render,toast,$,esc,fmt,db,list,startSyn
 export {S};
 /* phone's back button (Android app): close what is open, step back, and only then leave the app */
 function goBack(){
+  if($("#calcFrame")){const f=$("#calcFrame iframe");if(f&&f.contentWindow)f.contentWindow.postMessage({wbCalc:"back"},"*");else closeCalc();return true}
   const ask=$("#askSale");if(ask){const b=ask.querySelector('[data-a=""]');if(b)b.click();else ask.remove();return true}
   if(cameraOpen()){closeCamera();return true}
   const z=document.querySelector("img.zoom");if(z){z.click();return true}
@@ -1865,4 +1868,20 @@ if(isNative){try{Keyboard.addListener("keyboardWillShow",i=>kbSet(i.keyboardHeig
 else if(window.visualViewport){const vv=window.visualViewport;vv.addEventListener("resize",()=>{const h=window.innerHeight-vv.height;kbSet(h>120?h:0)})}
 document.addEventListener("focusin",e=>{const t=e.target;if(t&&t.type==="search"&&!t.closest("#sheet")){document.body.classList.add("typing");setTimeout(keepTypingVisible,250)}});
 document.addEventListener("focusout",()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.type==="search"))document.body.classList.remove("typing")},150));
+/* ---------- measurement calculator (public/naap.html) in a full-screen frame ----------
+   Its sections, rates and design rules are kept in calc/config so every phone of the shop sees the same;
+   the quotation being made stays on the phone. Only the owner / manager can change the shared settings. */
+const NAAP_ICON='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 9v12M15 9v12M3 15h18"/></svg>';
+function openCalc(){
+  if($("#calcFrame"))return;
+  const el=document.createElement("div");el.id="calcFrame";el.innerHTML=`<iframe src="naap.html" title="ناپ کیلکولیٹر"></iframe>`;
+  document.body.appendChild(el);document.body.classList.add("calc-open");
+}
+function closeCalc(){const el=$("#calcFrame");if(el)el.remove();document.body.classList.remove("calc-open")}
+window.addEventListener("message",ev=>{
+  const m=ev.data||{};if(!m.wbCalc)return;const fr=$("#calcFrame iframe");
+  if(m.wbCalc==="get"&&fr&&fr.contentWindow){const d=(S.calc||[]).find(x=>x.id==="config");fr.contentWindow.postMessage({wbCalc:"cfg",cfg:(d&&d.cfg)||null,shared:extraOk()},"*")}
+  if(m.wbCalc==="save"&&typeof m.cfg==="string"&&m.cfg.length<900000&&extraOk()&&S.isAdmin){const d=(S.calc||[]).find(x=>x.id==="config");if(!d||d.cfg!==m.cfg)db.set("calc","config",{cfg:m.cfg,byName:me.name||"",at:Date.now()})}
+  if(m.wbCalc==="close")closeCalc();
+});
 

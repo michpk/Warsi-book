@@ -96,7 +96,7 @@ export function boot(ctx) {
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      for (const c of ["branches", "items", "customers", "entries", "sales", "purchases", "expenses", "users"]) S[c] = list(c);
+      for (const c of ["branches", "items", "customers", "entries", "sales", "purchases", "expenses", "users", "calc", "closings", "logs"]) S[c] = list(c);
       for (const c of ["branches", "items", "customers"]) S.loaded[c] = true;
       render();
       if (S.openCust && !$("#sheet").hidden && !($("#entryForm") || {}).innerHTML) window.dispatchEvent(new CustomEvent("wb:refreshCust"));

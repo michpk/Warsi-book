@@ -1,0 +1,758 @@
+<!doctype html>
+<html lang="ur" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>وارثی ناپ کیلکولیٹر</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: a window-quotation workbench. Pick a design, type the size, see the frame drawn to scale with its sections and price;
+   collect windows into a quotation with material totals, cutting list and glass list. Warsi Book colours: deep teal + brass. */
+:root{
+  --bg:#eceeea; --surface:#fbfcfa; --sunk:#e3e8e3; --line:#cdd4cd; --fg:#1b241f; --muted:#5a6660;
+  --accent:#0d6452; --accent-2:#d7ebe4; --brass:#9a6f1f; --brass-2:#f6ecd6; --calc:#eef4f1;
+  --alu:#8b969c; --alu-2:#c9d1d5; --glass:#cfe7ef; --glass-2:#9fcadb; --dim:#b8862b;
+  --hdr-a:#0b2b33; --hdr-b:#0d4a45; --hdr-c:#11705a; --gold:#d6a545; --owe:#b3261e;
+  --f-display:"Noto Nastaliq Urdu","Noto Sans Arabic",serif;
+  --f-body:"Noto Sans Arabic","Segoe UI",Tahoma,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --r:12px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111613; --surface:#18201c; --sunk:#212a25; --line:#33403a; --fg:#e5ece8; --muted:#98a69f;
+  --accent:#43b99b; --accent-2:#173a31; --brass:#e0b45a; --brass-2:#3a2f17; --calc:#1b2a24;
+  --alu:#9aa6ac; --alu-2:#56636a; --glass:#1d3a45; --glass-2:#2f5a6b; --dim:#e0b45a;
+  --hdr-a:#081d23; --hdr-b:#0b3632; --hdr-c:#0e5446; --gold:#c9973c; --owe:#ff8f84; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --surface:#18201c; --sunk:#212a25; --line:#33403a; --fg:#e5ece8; --muted:#98a69f;
+  --accent:#43b99b; --accent-2:#173a31; --brass:#e0b45a; --brass-2:#3a2f17; --calc:#1b2a24;
+  --alu:#9aa6ac; --alu-2:#56636a; --glass:#1d3a45; --glass-2:#2f5a6b; --dim:#e0b45a;
+  --hdr-a:#081d23; --hdr-b:#0b3632; --hdr-c:#0e5446; --gold:#c9973c; --owe:#ff8f84; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.6;margin:0}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.band{background:radial-gradient(120% 160% at 100% 0%,var(--hdr-c),var(--hdr-b) 45%,var(--hdr-a));color:#eef5f1;border-bottom:3px solid var(--gold)}
+header.band .wrap{padding-block:14px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.brand{font-family:var(--f-display);font-size:28px;line-height:2;color:#f3dfa6;margin:0}
+.brand small{display:block;font-family:var(--f-body);font-size:13px;line-height:1.4;color:#cfe3dc;margin-top:-6px}
+.test{font-size:12.5px;background:rgba(214,165,69,.18);border:1px solid rgba(214,165,69,.55);color:#fbecc0;border-radius:999px;padding:4px 12px}
+nav.tabs{display:flex;gap:8px;flex-wrap:wrap;padding-block:14px 4px}
+nav.tabs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:600}
+nav.tabs button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+main.wrap{padding-block:10px 40px}
+.grid{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
+@media (min-width:920px){.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.sticky{position:sticky;top:12px}}
+.col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel h2{margin:0;font-size:17px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.panel h2 small,.en{font-family:var(--f-num);font-size:11.5px;font-weight:500;color:var(--muted);direction:ltr;font-style:normal}
+.panel h3{margin:2px 0 0;font-size:14.5px;color:var(--accent)}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.warn{font-size:12.5px;color:var(--owe);margin:0}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f > span{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap}
+input,select{border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:8px 10px;min-width:0;width:100%}
+input.n{font-family:var(--f-num);font-variant-numeric:tabular-nums;direction:ltr;text-align:right}
+.dim2{display:flex;gap:6px}
+.dim2 label{flex:1;display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--bg);border-radius:9px;padding:0 8px;min-width:0}
+.dim2 label input{border:0;background:transparent;padding:8px 2px}
+.dim2 label i{font-style:normal;font-size:12px;color:var(--muted)}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{flex:1;border:0;background:var(--bg);padding:8px;cursor:pointer;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.sm{padding:4px 10px;font-size:13px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--owe)}
+.toast{position:fixed;inset-inline:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));margin:auto;width:max-content;max-width:90vw;background:var(--fg);color:var(--bg);border-radius:10px;padding:8px 14px;font-size:14px;z-index:5}
+textarea.copy{width:100%;min-height:140px;border:1px solid var(--line);border-radius:9px;background:var(--bg);padding:8px;font-family:var(--f-body);direction:rtl;color:var(--fg)}
+/* tables */
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle;white-space:nowrap}
+tbody tr:last-child td{border-bottom:0}
+thead th{background:var(--sunk);font-weight:600;font-size:12.5px;color:var(--muted)}
+td.n,th.n{text-align:left;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+td.sec{font-family:var(--f-num);font-weight:600;direction:ltr;text-align:right}
+td input.n{width:84px;padding:4px 6px}
+td input.t{width:120px;padding:4px 6px}
+tr.tot td{background:var(--calc);font-weight:700}
+.fx{display:block;font-size:11px;color:var(--muted);font-family:var(--f-num);direction:ltr;text-align:right;white-space:nowrap;font-weight:400}
+/* design gallery */
+.designs{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.dz{border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 4px 6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;line-height:1.35;text-align:center}
+.dz svg{width:70px;height:62px}
+.dz[aria-pressed="true"]{border-color:var(--brass);background:var(--brass-2);box-shadow:0 0 0 2px color-mix(in srgb,var(--brass) 30%,transparent)}
+/* drawing */
+svg .alu{fill:var(--alu-2);stroke:var(--alu);stroke-width:1.2}
+svg .sash{fill:none;stroke:var(--alu);stroke-width:1.6}
+svg .gl{fill:var(--glass);stroke:var(--glass-2);stroke-width:.8}
+svg .shine{stroke:#fff;stroke-opacity:.55;stroke-width:1.4;fill:none}
+svg .arr{stroke:var(--brass);stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg .dl{stroke:var(--dim);stroke-width:1;fill:none}
+svg .dt{fill:var(--fg);font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600}
+svg .lb{fill:var(--muted);font-family:"IBM Plex Mono",monospace;font-size:9.5px}
+.stage{background:repeating-linear-gradient(0deg,transparent 0 19px,color-mix(in srgb,var(--line) 45%,transparent) 19px 20px),repeating-linear-gradient(90deg,transparent 0 19px,color-mix(in srgb,var(--line) 45%,transparent) 19px 20px),var(--bg);border:1px solid var(--line);border-radius:12px;display:grid;place-items:center;padding:8px;min-height:240px}
+.stage svg{width:100%;max-width:420px;height:auto}
+/* price chips */
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.cmp button{border:1.5px solid var(--line);background:var(--bg);border-radius:12px;padding:8px 10px;display:flex;flex-direction:column;gap:0;cursor:pointer;text-align:right}
+.cmp button span{font-family:var(--f-num);font-size:12.5px;color:var(--muted);direction:ltr;text-align:right}
+.cmp button b{font-family:var(--f-num);font-size:18px;direction:ltr;text-align:right}
+.cmp button small{font-size:11.5px;color:var(--muted)}
+.cmp button[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-2)}
+.cmp button.low b{color:var(--accent)}
+.total{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;border-radius:12px;padding:12px 14px;background:radial-gradient(120% 160% at 100% 0%,var(--hdr-c),var(--hdr-b) 50%,var(--hdr-a));color:#eef5f1;border:1px solid color-mix(in srgb,var(--gold) 50%,transparent)}
+.total span{font-size:14px}
+.total b{font-family:var(--f-num);font-size:26px;color:#fff;direction:ltr}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.kv div{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);display:flex;flex-direction:column}
+.kv span{font-size:12px;color:var(--muted)}
+.kv b{font-family:var(--f-num);font-size:17px;direction:ltr;text-align:right}
+/* quotation items */
+.items{display:flex;flex-direction:column;gap:8px}
+.item{display:grid;grid-template-columns:72px minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--bg)}
+.item svg{width:72px;height:60px}
+.item b{font-size:14.5px}
+.item .p{font-family:var(--f-num);font-weight:700;direction:ltr;text-align:left}
+.item .acts{display:flex;gap:4px;justify-content:flex-end}
+.empty{border:1px dashed var(--line);border-radius:10px;padding:14px;text-align:center;color:var(--muted);font-size:13.5px}
+details.set{border:1px dashed var(--line);border-radius:10px;padding:8px 12px}
+details.set > summary{cursor:pointer;font-weight:600;color:var(--brass)}
+details.set[open] > summary{margin-bottom:10px}
+.subtabs{display:flex;gap:6px;flex-wrap:wrap}
+.subtabs button{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px;cursor:pointer;font-weight:600;font-size:13.5px}
+.subtabs button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.bars{display:flex;flex-direction:column;gap:4px}
+bdi.buy{font-family:var(--f-num);font-weight:600}
+.bar{display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--sunk);border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:var(--alu-2);border-inline-end:1px solid var(--surface);font-style:normal;font-size:9px;line-height:16px;text-align:center;color:var(--fg);overflow:hidden;font-family:var(--f-num);direction:ltr;unicode-bidi:isolate}
+/* sheet-style result rows (paneling, ceiling, wallpaper) */
+.rows{display:flex;flex-direction:column}
+.rr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:center;padding:7px 2px;border-bottom:1px solid var(--line)}
+.rr:last-child{border-bottom:0}
+.rr .k{display:flex;flex-direction:column;min-width:0}
+.rr .k .en{text-align:right}
+.rr .v{font-family:var(--f-num);font-variant-numeric:tabular-nums;font-weight:600;direction:ltr;text-align:left}
+.rr .v small{display:block;font-weight:400;font-size:11.5px;color:var(--muted)}
+.rr.money .v{color:var(--brass)}
+.ded{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:end}
+.ded b{font-size:13.5px;align-self:center}
+/* section manager */
+.secform{border:1.5px solid var(--brass);background:var(--brass-2);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.secform h3{margin:0}
+.chk{display:flex;flex-wrap:wrap;gap:6px}
+.chk label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer}
+.chk label input{width:auto}
+.chk label.has{border-color:var(--accent)}
+.fx2{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.fx2 label{display:flex;flex-direction:column;font-size:11.5px;color:var(--muted);gap:2px}
+.sysrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.seccards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:8px}
+.seccard{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--bg);display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-top{display:flex;align-items:center;gap:6px}
+.sc-name{width:110px;font-family:var(--f-num);font-weight:600}
+.sc-where{font-size:12.5px;line-height:1.9}
+.sc-nums{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:6px}
+.sc-nums label{display:flex;flex-direction:column;font-size:11.5px;color:var(--muted);gap:2px}
+.pill2{display:inline-block;font-size:11px;border:1px solid var(--line);border-radius:999px;padding:0 7px;margin:1px;color:var(--muted)}
+.closebar{position:fixed;top:calc(8px + env(safe-area-inset-top,0px));left:10px;z-index:6;border:1px solid rgba(255,255,255,.4);background:rgba(0,0,0,.25);color:#fff;border-radius:999px;width:38px;height:38px;font-size:20px;cursor:pointer}
+</style></head><body>
+
+<header class="band"><div class="wrap">
+  <h1 class="brand">وارثی ناپ کیلکولیٹر<small>کھڑکی دروازے کا ڈیزائن، سائز، سیکشن، کٹنگ لسٹ اور کوٹیشن</small></h1>
+  <span class="test" id="syncState">سیٹنگ اسی فون میں</span>
+</div></header>
+<button type="button" class="closebar" id="closeCalc" hidden aria-label="بند کریں">×</button>
+<div class="wrap"><nav class="tabs" id="tabs" aria-label="کیلکولیٹر">
+  <button data-tab="al" aria-pressed="true">ایلومینیم</button>
+  <button data-tab="pan" aria-pressed="false">پینلنگ</button>
+  <button data-tab="ceil" aria-pressed="false">سیلنگ</button>
+  <button data-tab="wp" aria-pressed="false">وال پیپر</button>
+</nav></div>
+<main class="wrap" id="main"></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* ===================== aluminium: systems, roles, designs ===================== */
+// Every profile has a role. A design says which roles it uses and how long each piece is.
+const ROLES=[
+  ["track","نیچے کا ٹریک","Bottom track"],["frame","فریم","Frame (top + sides)"],["inter","انٹرلاک","Interlock"],
+  ["side","پلّے کی سائیڈ","Sash side / lock"],["tb","پلّے کا اوپر نیچے","Sash top / bottom"],["bead","بیڈنگ / D29","Bead"],
+  ["transom","درمیانی پٹی (ٹرانسم / مولین)","Transom / mullion"],["cs","کھلنے والا پلّا","Casement sash"],
+  ["dframe","دروازے کا فریم","Door frame"],["dsash","دروازے کا پلّا","Door sash"],["rail","دروازے کی پٹی (D 52)","Door rail"],["rail2","دروازے کی پٹی (D 46)","Door rail 2"]
+];
+const SYS_NAMES=(t,f,i,s,b,d)=>({track:t,frame:f,inter:i,side:s,tb:b,bead:d,transom:"Transom",cs:"Casement",dframe:"D 54 F",dsash:"D 59",rail:"D 52",rail2:"D 46"});
+const z=()=>({transom:0,cs:0,dframe:0,dsash:0,rail:0,rail2:0});
+// piece: {r:role, a:×W, b:×H, v:×V(vent), c:+feet, c2:+feet when the job has more than 2 windows, d:÷, p:pieces per window}
+//   length = (aW + bH + vV + c) / d  feet.   From the shop's sheet (4×4 window): DC 26 F 4½ (4¼ for 3+ windows),
+//   DC 30 F 13 (12½), M 28 8, M 23 8, M 24 8, D 29 16 feet.
+const P=(r,a,b,c,p,d=1,v=0,c2)=>({r,a,b,v,c,d,p,...(c2!=null?{c2}:{})});
+function slideRules(n){return [P("frame",0,1,0,2),P("frame",1,0,1,1,1,0,0.5),P("track",1,0,0.5,1,1,0,0.25),P("inter",0,1,0,2*(n-1)),P("side",0,1,0,2),P("tb",1,0,0,2*n,n),P("bead",1,0,0,2),P("bead",0,1,0,2)]}
+const DESIGNS={
+  sl2:{n:"سلائیڈنگ، 2 پلّے",kind:"slide",sashes:2,rules:slideRules(2)},
+  sl3:{n:"سلائیڈنگ، 3 پلّے",kind:"slide",sashes:3,rules:slideRules(3)},
+  sl4:{n:"سلائیڈنگ، 4 پلّے",kind:"slide",sashes:4,rules:slideRules(4)},
+  slv:{n:"سلائیڈنگ + روشندان",kind:"slidev",sashes:2,vent:true,rules:[P("frame",0,1,0,2),P("frame",1,0,1,1),P("track",1,0,0.5,1),P("transom",1,0,0,1),P("inter",0,1,0,2,1,-1),P("side",0,1,0,2,1,-1),P("tb",1,0,0,4,2),P("bead",1,0,0,2),P("bead",0,1,0,2)]},
+  fix:{n:"فکس شیشہ",kind:"fix",sashes:0,rules:[P("frame",0,1,0,2),P("frame",1,0,1,1),P("track",1,0,0.5,1),P("bead",1,0,0,2),P("bead",0,1,0,2)]},
+  cs1:{n:"کھلنے والی، 1 پلّا",kind:"case",sashes:1,rules:[P("frame",0,1,0,2),P("frame",1,0,0,2),P("cs",0,1,0,2),P("cs",1,0,0,2),P("bead",1,0,0,2),P("bead",0,1,0,2)]},
+  cs2:{n:"کھلنے والی، 2 پلّے",kind:"case",sashes:2,rules:[P("frame",0,1,0,2),P("frame",1,0,0,2),P("transom",0,1,0,1),P("cs",0,1,0,4),P("cs",1,0,0,4,2),P("bead",1,0,0,2),P("bead",0,1,0,4)]},
+  dr1:{n:"دروازہ، 1 پلّا",kind:"door",sashes:1,rules:[P("dframe",0,1,0,2),P("dframe",1,0,0.5,1),P("dsash",0,1,0,2),P("dsash",1,0,0.5,1),P("rail",1,0,0,1),P("rail2",1,0,0,1)]},
+  dr2:{n:"دروازہ، 2 پلّے",kind:"door",sashes:2,rules:[P("dframe",0,1,0,2),P("dframe",1,0,0.5,1),P("dsash",0,1,0,4),P("dsash",1,0,0.5,2,2),P("rail",1,0,0,2,2),P("rail2",1,0,0,2,2)]},
+  drs:{n:"سلائیڈنگ دروازہ",kind:"slide",sashes:2,door:true,rules:slideRules(2)}
+};
+const DEF={
+  tab:"al",
+  al:{
+    form:{d:"sl2",label:"",wf:4,wi:0,hf:4,hi:0,v:18,q:1,sys:0,fin:"ch",g:0},
+    items:[],
+    disc:19, margin:0, barLen:16, gw:1, gh:3, glassFull:true, bulkN:2,
+    // lengths each section is sold in (feet), from the shop's sheet
+    stock:{"DC 26 F":"15, 17, 19","DC 30 F":"15, 17, 19","EC 26 F":"15, 17, 19","EC 30 F":"15, 17, 19","M 28":"14, 16, 18","M 23":"14, 16, 18","M 24":"14, 16, 18","EC 28":"14, 16, 18","EC 23":"14, 16, 18","EC 24":"14, 16, 18","D29":"19","EC 29":"19","D 54 F":"15, 17, 19","D 59":"16, 18","D 52":"18","D 46":"18"},
+    glass:[{n:"5mm سادہ",r:400},{n:"5mm رنگین",r:450},{n:"فراسٹڈ",r:480}],
+    sys:[
+      {name:"1.2 MM",names:SYS_NAMES("DC 26 F","DC 30 F","M 28","M 23","M 24","D29"),dull:{track:880,frame:754,inter:431,side:354,tb:420,bead:274,...z()},ch:{},other:800,labour:2000},
+      {name:"1.6 MM",names:SYS_NAMES("DC 26 F","DC 30 F","M 28","M 23","M 24","D29"),dull:{track:703,frame:611,inter:351,side:299,tb:322,bead:183,...z()},ch:{},other:600,labour:2000},
+      {name:"EC",names:SYS_NAMES("EC 26 F","EC 30 F","EC 28","EC 23","EC 24","EC 29"),dull:{track:728,frame:636,inter:365,side:285,tb:345,bead:274,...z()},ch:{},other:800,labour:2000}
+    ],
+    rules:Object.fromEntries(Object.entries(DESIGNS).map(([k,d])=>[k,d.rules])),
+    view:"cost"
+  },
+  pan:{L:13,Wd:16,nDW:4,ratePanel:470,rateGola:150,labour:60,win1:[70,82],win2:[0,0],door1:[47,60],door2:[0,0],door3:[0,0],nail:650,alfi:250,height:9.5,panelArea:7.91,panelWidth:10,extra:2,golaRows:2,golaPerDW:30,golaLen:10},
+  ceil:{rate:70,sheetArea:4,teeDiv:4.25,angleLen:10},
+  wp:{L:15,Wd:16,H:10,flexRate:55,rollRate:7500,labour:2000,perRoll:300}
+};
+let S;
+try{S=JSON.parse(localStorage.getItem("wb_naap3")||"null")}catch(e){S=null}
+S=merge(structuredClone(DEF),S||{});
+/* sections: every profile is its own row — name, which system, which place (role) in a design, rates.
+   Built once from the older "system → names / rates" tables. */
+function secsFromSys(sysArr,stock){const out=[];sysArr.forEach((sy,i)=>{for(const [r] of ROLES){const n=(sy.names||{})[r];if(!n)continue;out.push({id:"s"+i+"_"+r,name:n,sys:sy.name,role:r,dull:(sy.dull||{})[r]??0,ch:(sy.ch||{})[r]??""})}});return out}
+if(S.ver!==4){S.al.rules=structuredClone(DEF.al.rules);for(const sy of S.al.sys){for(const [k,v] of Object.entries({dframe:"D 54 F",dsash:"D 59",rail:"D 52",rail2:"D 46"}))if(!sy.names[k]||/Door|Rail/.test(sy.names[k]))sy.names[k]=v;if(sy.name==="EC"&&sy.names.bead==="D29")sy.names.bead="EC 29";if(sy.dull.rail2==null)sy.dull.rail2=0}S.ver=4}
+if(!S.al.secs||!S.al.secs.length){S.al.secs=secsFromSys(S.al.sys,S.al.stock);S.al.roles=S.al.roles||[]}
+S.al.roles=S.al.roles||[];
+function merge(a,b){for(const k in b){if(b[k]&&typeof b[k]==="object"&&!Array.isArray(b[k])&&a[k]&&typeof a[k]==="object"&&!Array.isArray(a[k]))merge(a[k],b[k]);else if(b[k]!==undefined)a[k]=b[k]}return a}
+function save(){try{localStorage.setItem("wb_naap3",JSON.stringify(S))}catch(e){}if(typeof postCfg==="function")postCfg()}
+/* windows in the whole job (bulk allowance applies when there are more than bulkN) */
+function jobWindows(extra){return S.al.items.reduce((a,it)=>a+(DESIGNS[it.d].kind==="door"?0:Math.max(1,num(it.q))),0)+(extra||0)}
+const $=s=>document.querySelector(s),num=v=>{const n=parseFloat(String(v).replace(/,/g,""));return isFinite(n)?n:0};
+const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const f2=(n,d=2)=>{const r=Math.round(n*10**d)/10**d;return r.toLocaleString("en-PK",{maximumFractionDigits:d})};
+const rs=n=>"Rs "+f2(n,0);
+const up=x=>Math.ceil(x-1e-9),down=x=>Math.floor(x+1e-9);
+const ftin=ft=>{const t=Math.round(ft*12*4)/4,f=Math.floor(t/12),i=Math.round((t-f*12)*4)/4;return (f?f+"′":"")+(i?(f?" ":"")+i+"″":(f?"":"0″"))};
+function get(p){return p.split(".").reduce((o,k)=>o[k],S)}
+function set(p,v){const ks=p.split("."),l=ks.pop();ks.reduce((o,k)=>o[k],S)[l]=v}
+function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,2200)}
+
+/* ---------- one window → pieces, glass, price ---------- */
+function geom(it){const W=num(it.wf)+num(it.wi)/12,H=num(it.hf)+num(it.hi)/12,V=DESIGNS[it.d]&&DESIGNS[it.d].vent?num(it.v)/12:0;return {W,H,V}}
+function pieces(it,bulk){
+  const {W,H,V}=geom(it),rules=S.al.rules[it.d]||DESIGNS[it.d].rules;
+  return rules.map(p=>({role:p.r,len:Math.max(0,(num(p.a)*W+num(p.b)*H+num(p.v)*V+num(bulk&&p.c2!=null&&p.c2!==""?p.c2:p.c))/(num(p.d)||1)),pcs:num(p.p)})).filter(x=>x.len>0&&x.pcs>0);
+}
+function panes(it){
+  const D=DESIGNS[it.d],{W,H,V}=geom(it),A=S.al,gw=num(A.gw)/12,gh=num(A.gh)/12,n=D.sashes||1,out=[];
+  const add=(w,h,c)=>out.push({w:Math.max(0,w-gw),h:Math.max(0,h-gh),c});
+  if(D.kind==="slide")add(W/n+(n>1?1/12:0),H,n);
+  else if(D.kind==="slidev"){add(W/2+1/12,H-V,2);add(W,V,1)}
+  else if(D.kind==="fix")add(W,H,1);
+  else if(D.kind==="case")add(W/n,H,n);
+  else if(D.kind==="door")add(W/n,H/2,2*n);
+  return out;
+}
+const roleList=()=>[...ROLES,...(S.al.roles||[])];
+const roleName=k=>(roleList().find(r=>r[0]===k)||[k,k])[1];
+const CORE=new Set(ROLES.map(r=>r[0]));
+/* the section used for a place in a system (a section for "all systems" fills any gap) */
+function secFor(sy,role){const L=S.al.secs||[];return L.find(x=>x.role===role&&x.sys===sy.name)||L.find(x=>x.role===role&&x.sys==="*")}
+const designsUsing=role=>Object.keys(DESIGNS).filter(k=>(S.al.rules[k]||[]).some(p=>p.r===role));
+function priceIt(it,sysIdx,bulk){
+  const A=S.al,sy=A.sys[sysIdx??it.sys]||A.sys[0],{W,H}=geom(it),q=Math.max(1,num(it.q)),dp=num(A.disc)/100,fin=it.fin==="dull"?"dull":"ch";
+  const rateOf=sec=>{const c=sec.ch;return fin==="ch"&&c!==""&&c!=null?num(c):num(sec.dull)};
+  const noSec=new Set();
+  if(bulk==null)bulk=jobWindows()>num(A.bulkN);const by={};for(const p of pieces(it,bulk)){const sec=secFor(sy,p.role);if(!sec){if(CORE.has(p.role))noSec.add(roleName(p.role));continue}const k=sec.id;by[k]=by[k]||{role:p.role,name:sec.name,sec,ft:0,cuts:[]};by[k].ft+=p.len*p.pcs*q;by[k].cuts.push({len:p.len,pcs:p.pcs*q})}
+  const secs=Object.values(by).map(s=>{const rr=rateOf(s.sec),amt=s.ft*rr,disc=amt*dp;return {...s,rate:rr,amt,disc,price:amt-disc}});
+  const area=W*H*q,ps=panes(it),glassArea=A.glassFull?area:ps.reduce((a,x)=>a+x.w*x.h*x.c,0)*q;
+  const g=A.glass[it.g]||A.glass[0]||{r:0,n:""},glass=glassArea*num(g.r),other=num(sy.other)*q,labour=num(sy.labour)*q;
+  const alu=secs.reduce((a,s)=>a+s.price,0),sub=alu+glass+other+labour,margin=sub*num(A.margin)/100,total=sub+margin;
+  const missing=[...secs.filter(s=>!s.rate).map(s=>s.name),...[...noSec].map(r=>r+" (سیکشن نہیں لگا)")];
+  return {sy,W,H,q,secs,alu,area,glassArea,glass,gName:g.n,other,labour,margin,total,missing,panes:ps,bulk};
+}
+/* ---------- quotation totals, cutting list, bars ---------- */
+function quote(){
+  const A=S.al,bulk=jobWindows()>num(A.bulkN),rows=A.items.map(it=>({it,p:priceIt(it,undefined,bulk)}));
+  const total=rows.reduce((a,r)=>a+r.p.total,0),area=rows.reduce((a,r)=>a+r.p.area,0),glassArea=rows.reduce((a,r)=>a+r.p.glassArea,0);
+  // material per section name (a section is bought by its name, whatever the system)
+  const mat={};
+  for(const {p} of rows)for(const s of p.secs){const k=p.sy.name+"|"+s.name;const m=mat[k]=mat[k]||{sys:p.sy.name,name:s.name,ft:0,amt:0,cuts:[]};m.ft+=s.ft;m.amt+=s.price;for(const c of s.cuts)for(let i=0;i<c.pcs;i++)m.cuts.push(c.len)}
+  for(const m of Object.values(mat)){
+    m.lens=stockLens(m.name);const best=planBars(m.cuts,m.lens);
+    m.bars=best.bars;m.waste=best.waste;m.buyFt=best.buy;m.over=best.over;
+    const cnt={};for(const b of m.bars)cnt[b.len]=(cnt[b.len]||0)+1;m.buy=Object.entries(cnt).sort((a,b)=>b[0]-a[0]).map(([L,n])=>({len:+L,n}));
+  }
+  return {rows,total,area,glassArea,mat:Object.values(mat),bulk};
+}
+
+/* lengths a section comes in: from the setting, else the general stock length */
+function stockLens(name){const v=(S.al.stock||{})[name];const a=String(v||"").split(/[^\d.]+/).map(num).filter(x=>x>0).sort((a,b)=>a-b);return a.length?a:[Math.max(1,num(S.al.barLen))]}
+/* cut pieces into bars: try packing with each bar size (first-fit decreasing), then shrink every bar to the
+   shortest size its pieces fit in; keep the plan that buys the fewest feet (then the fewest bars) */
+function planBars(cuts,lens){
+  const max=lens[lens.length-1],over=cuts.filter(L=>L>max+1e-9).length,fit=cuts.filter(L=>L<=max+1e-9).sort((a,b)=>b-a);
+  let best=null;
+  for(const cap of lens){
+    if(fit.length&&fit[0]>cap+1e-9)continue;
+    const bins=[];for(const L of fit){let b=bins.find(x=>x.used+L<=cap+1e-9);if(!b){b={used:0,cuts:[]};bins.push(b)}b.used+=L;b.cuts.push(L)}
+    const bars=bins.map(b=>({len:lens.find(l=>l+1e-9>=b.used),cuts:b.cuts,used:b.used})).map(b=>({...b,left:b.len-b.used}));
+    const buy=bars.reduce((a,b)=>a+b.len,0);
+    if(!best||buy<best.buy-1e-9||(Math.abs(buy-best.buy)<1e-9&&bars.length<best.bars.length))best={bars,buy};
+  }
+  best=best||{bars:[],buy:0};
+  return {...best,waste:best.bars.reduce((a,b)=>a+b.left,0),over};
+}
+
+/* ---------- drawing ---------- */
+function drawSvg(d,W,H,V,opt={}){
+  const D=DESIGNS[d],big=!!opt.big,pad=big?46:4,boxW=big?380:64,boxH=big?260:54;
+  const s=Math.min(boxW/Math.max(W,.1),boxH/Math.max(H,.1)),w=W*s,h=H*s,x0=pad+(boxW-w)/2,y0=(big?14:4)+(boxH-h)/2;
+  const fr=Math.max(2.5,Math.min(9,s*0.18)),sa=Math.max(2,fr*0.75);
+  let g=`<rect class="alu" x="${x0}" y="${y0}" width="${w}" height="${h}" rx="1.5"/>`;
+  const glass=(x,y,ww,hh)=>`<rect class="gl" x="${x}" y="${y}" width="${Math.max(0,ww)}" height="${Math.max(0,hh)}"/><path class="shine" d="M${x+ww*.18} ${y+hh*.75}L${x+ww*.45} ${y+hh*.22}"/>`;
+  const sash=(x,y,ww,hh)=>`<rect class="alu" x="${x}" y="${y}" width="${ww}" height="${hh}"/>`+glass(x+sa,y+sa,ww-2*sa,hh-2*sa);
+  const arrow=(cx,cy,dir)=>{const L=Math.min(14,w/8);return `<path class="arr" d="M${cx-L} ${cy}H${cx+L}M${cx+dir*L} ${cy}l${-dir*5} -4M${cx+dir*L} ${cy}l${-dir*5} 4"/>`};
+  const ix=x0+fr,iy=y0+fr,iw=w-2*fr,ih=h-2*fr;
+  if(D.kind==="slide"||D.kind==="slidev"){
+    let sy=iy,sh=ih;
+    if(D.kind==="slidev"){const vh=Math.min(ih*0.5,V*s);g+=glass(ix,iy,iw,vh-fr/2)+`<rect class="alu" x="${ix}" y="${iy+vh-fr/2}" width="${iw}" height="${fr}"/>`;sy=iy+vh+fr/2;sh=ih-vh-fr/2}
+    const n=D.sashes,sw=iw/n;
+    for(let i=0;i<n;i++){const x=ix+i*sw-(i?sa/2:0),ww=sw+(i&&i<n-1?sa:sa/2);g+=sash(x,sy,ww,sh)}
+    if(n===2){g+=arrow(ix+sw*.5,sy+sh/2,1)+arrow(ix+sw*1.5,sy+sh/2,-1)}
+    else if(n===3){g+=arrow(ix+sw*1.5,sy+sh/2,1)}
+    else {g+=arrow(ix+sw*1.5,sy+sh/2,-1)+arrow(ix+sw*2.5,sy+sh/2,1)}
+    if(D.door)g+=`<rect class="alu" x="${ix+iw/2-sa*2}" y="${sy+sh*.48}" width="${sa}" height="${sh*.08}"/>`;
+  }else if(D.kind==="fix"){g+=glass(ix,iy,iw,ih)}
+  else if(D.kind==="case"){const n=D.sashes,sw=iw/n;if(n===2)g+=`<rect class="alu" x="${ix+sw-fr/2}" y="${iy}" width="${fr}" height="${ih}"/>`;
+    for(let i=0;i<n;i++){const x=ix+i*sw+(n===2&&i?fr/2:0),ww=sw-(n===2?fr/2:0);g+=sash(x,iy,ww,ih);const hinge=n===2?(i?1:0):0;g+=`<path class="arr" d="M${hinge?x+ww-sa:x+sa} ${iy+sa}L${hinge?x+sa:x+ww-sa} ${iy+ih/2}L${hinge?x+ww-sa:x+sa} ${iy+ih-sa}" stroke-dasharray="4 3"/>`}}
+  else if(D.kind==="door"){const n=D.sashes,sw=iw/n;
+    for(let i=0;i<n;i++){const x=ix+i*sw,y=iy;g+=`<rect class="alu" x="${x}" y="${y}" width="${sw}" height="${ih}"/>`+glass(x+sa,y+sa,sw-2*sa,ih/2-1.5*sa)+glass(x+sa,y+ih/2+sa/2,sw-2*sa,ih/2-1.5*sa)+`<rect class="alu" x="${i?x+sa*1.2:x+sw-sa*2.2}" y="${y+ih*.47}" width="${sa}" height="${ih*.07}"/>`}}
+  if(big){
+    const yb=y0+h+20,xr=x0-22;
+    g+=`<path class="dl" d="M${x0} ${y0+h+6}V${yb+6}M${x0+w} ${y0+h+6}V${yb+6}M${x0} ${yb}H${x0+w}M${x0} ${yb}l6 -3v6zM${x0+w} ${yb}l-6 -3v6z"/><text class="dt" x="${x0+w/2}" y="${yb+16}" text-anchor="middle">${ftin(W)}</text>`;
+    g+=`<path class="dl" d="M${x0-6} ${y0}H${xr-6}M${x0-6} ${y0+h}H${xr-6}M${xr} ${y0}V${y0+h}M${xr} ${y0}l-3 6h6zM${xr} ${y0+h}l-3 -6h6z"/><text class="dt" x="${xr-6}" y="${y0+h/2}" text-anchor="middle" transform="rotate(-90 ${xr-6} ${y0+h/2})">${ftin(H)}</text>`;
+    if(D.vent&&V>0){const vh=Math.min(ih*0.5,V*s);g+=`<text class="lb" x="${x0+w+6}" y="${y0+fr+vh/2+3}">روشندان ${ftin(V)}</text>`}
+  }
+  const vbW=big?boxW+pad*2:boxW+pad*2,vbH=big?boxH+50:boxH+8;
+  return `<svg viewBox="0 0 ${vbW} ${vbH}" role="img" aria-label="${esc(D.n)} ${big?ftin(W)+" × "+ftin(H):""}">${g}</svg>`;
+}
+
+/* ===================== aluminium UI ===================== */
+const FI=(ur,en,path,o={})=>`<label class="f"><span>${ur}${en?`<i class="en">${en}</i>`:""}</span><input class="n" id="i_${path.replace(/\./g,"_")}" data-k="${path}" inputmode="decimal" value="${esc(get(path))}"${o.ph?` placeholder="${o.ph}"`:""}></label>`;
+const DIM=(label,p,fk,ik)=>`<div class="f"><span>${label}</span><div class="dim2"><label><input class="n" id="i_${p.replace(/\./g,"_")}_${fk}" data-k="${p}.${fk}" inputmode="decimal" value="${esc(get(p+"."+fk))}" aria-label="${label} فٹ"><i>فٹ</i></label><label><input class="n" id="i_${p.replace(/\./g,"_")}_${ik}" data-k="${p}.${ik}" inputmode="decimal" value="${esc(get(p+"."+ik))}" aria-label="${label} انچ"><i>انچ</i></label></div></div>`;
+let editIdx=-1;
+function viewAl(){
+  const A=S.al,f=A.form;
+  return `<div class="grid">
+  <div class="col">
+    <section class="panel"><h2>1. ڈیزائن چنیں</h2>
+      <div class="designs" id="designs">${Object.entries(DESIGNS).map(([k,d])=>`<button type="button" class="dz" data-d="${k}" aria-pressed="${f.d===k}">${drawSvg(k,d.kind==="door"?3:4,d.kind==="door"?6.5:3.6,1)}${d.n}</button>`).join("")}</div>
+    </section>
+    <section class="panel"><h2>2. سائز اور سسٹم</h2>
+      <div class="fields">${DIM("چوڑائی","al.form","wf","wi")}${DIM("اونچائی","al.form","hf","hi")}</div>
+      <div class="fields">
+        <label class="f" id="ventF" ${DESIGNS[f.d].vent?"":"hidden"}><span>روشندان کی اونچائی (انچ)</span><input class="n" id="i_al_form_v" data-k="al.form.v" inputmode="decimal" value="${esc(f.v)}"></label>
+        ${FI("تعداد","","al.form.q")}
+        <label class="f"><span>نام / جگہ</span><input id="i_al_form_label" data-t="al.form.label" value="${esc(f.label)}" placeholder="مثلاً کچن"></label>
+      </div>
+      <div class="fields">
+        <label class="f"><span>سسٹم / موٹائی</span><select id="i_al_form_sys" data-sel="al.form.sys">${A.sys.map((s,i)=>`<option value="${i}" ${f.sys==i?"selected":""}>${esc(s.name)}</option>`).join("")}</select></label>
+        <div class="f"><span>رنگ</span><div class="seg" id="fin"><button type="button" data-fin="ch" aria-pressed="${f.fin!=="dull"}">Ch</button><button type="button" data-fin="dull" aria-pressed="${f.fin==="dull"}">Dull</button></div></div>
+        <label class="f"><span>شیشہ</span><select id="i_al_form_g" data-sel="al.form.g">${A.glass.map((g,i)=>`<option value="${i}" ${f.g==i?"selected":""}>${esc(g.n)} · ${f2(num(g.r),0)}</option>`).join("")}</select></label>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="add" id="addBtn">${editIdx>=0?"تبدیلی محفوظ کریں":"+ کوٹیشن میں شامل کریں"}</button>${editIdx>=0?`<button class="btn" data-act="cancelEdit">منسوخ</button>`:""}</div>
+    </section>
+  </div>
+  <div class="col sticky">
+    <section class="panel"><h2 id="pvTitle"></h2><div class="stage" id="stage"></div><div class="cmp" id="pvCmp"></div><div id="pvSecs"></div></section>
+  </div>
+  </div>
+  <section class="panel" style="margin-top:16px"><h2>کوٹیشن</h2><div class="items" id="items"></div><div id="qTotals"></div></section>
+  <section class="panel" style="margin-top:16px"><h2>تفصیل</h2>
+    <div class="subtabs" id="views">${[["cost","سیکشن اور قیمت"],["cut","کٹنگ لسٹ"],["bars","لمبائیاں (اسٹاک)"],["glass","شیشے کی لسٹ"]].map(([k,l])=>`<button data-view="${k}" aria-pressed="${A.view===k}">${l}</button>`).join("")}</div>
+    <div id="detail"></div>
+  </section>
+  <section class="panel" style="margin-top:16px"><details class="set"><summary>ریٹ اور سیٹنگ</summary><div class="col" id="settings"></div></details></section>`;
+}
+function settingsHtml(){
+  const A=S.al;
+  return `<div class="fields">${FI("ڈسکاؤنٹ ٪","Discount","al.disc")}${FI("منافع ٪","","al.margin")}${FI("دوسرے سیکشن کی لمبائی (فٹ)","stock length","al.barLen")}${FI("اتنی کھڑکیوں سے زیادہ ہوں تو کم الاؤنس","","al.bulkN")}${FI("شیشہ کٹوتی چوڑائی (انچ)","","al.gw")}${FI("شیشہ کٹوتی اونچائی (انچ)","","al.gh")}</div>
+  <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="i_glassFull" data-cb="al.glassFull" ${A.glassFull?"checked":""} style="width:auto"> شیشے کی قیمت پورے سائز (چوڑائی × اونچائی) پر لگائیں، کٹے ہوئے سائز پر نہیں</label>
+  <h3>سسٹم / سیریز</h3>
+  <p class="note">"دیگر" اور "مزدوری" فی کھڑکی لگتے ہیں۔ نام بدلیں تو اس سسٹم کے سب سیکشن ساتھ رہتے ہیں۔</p>
+  <div class="tw"><table><thead><tr><th>نام</th><th class="n">دیگر</th><th class="n">مزدوری</th><th class="n">سیکشن</th><th></th></tr></thead><tbody>
+    ${A.sys.map((sy,i)=>`<tr><td><input class="t" data-sysname="${i}" id="i_sysname_${i}" value="${esc(sy.name)}" dir="ltr" aria-label="سسٹم کا نام"></td><td class="n"><input class="n" data-k="al.sys.${i}.other" id="i_o_${i}" value="${esc(sy.other)}" inputmode="decimal"></td><td class="n"><input class="n" data-k="al.sys.${i}.labour" id="i_l_${i}" value="${esc(sy.labour)}" inputmode="decimal"></td><td class="n">${A.secs.filter(x=>x.sys===sy.name).length}</td><td>${A.sys.length>1?`<button class="btn sm ghost danger" data-act="sysdel" data-i="${i}" aria-label="سسٹم ہٹائیں">×</button>`:""}</td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="sysrow"><button class="btn sm" data-act="sysadd">+ نیا سسٹم</button><span class="note">نیا سسٹم بنانے پر اوپر چنے ہوئے سسٹم کے سب سیکشن اس میں کاپی ہو جاتے ہیں، پھر نام اور ریٹ بدل لیں۔</span></div>
+  <h3>سیکشن</h3>
+  <p class="note">ہر سیکشن کا نام، سسٹم، جگہ (کھڑکی / دروازے کا کون سا حصہ)، ریٹ فی فٹ اور لمبائیاں (کوما سے، مثلاً 15, 17, 19)۔ Ch خالی ہو تو Dull والا ریٹ لگتا ہے۔</p>
+  <div class="subtabs" id="secTabs">${["*all",...A.sys.map(x=>x.name),"*"].map(k=>`<button data-secf="${esc(k)}" aria-pressed="${secF===k}">${k==="*all"?"سب":k==="*"?"سب سسٹم والے":`<bdi dir="ltr">${esc(k)}</bdi>`}</button>`).join("")}</div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary sm" data-act="secnew">+ نیا سیکشن شامل کریں</button></div>
+  <div id="secFormBox">${SF?secFormHtml():""}</div>
+  <div class="seccards">${A.secs.filter(x=>secF==="*all"||x.sys===secF).map(x=>{const ds=designsUsing(x.role);return `<div class="seccard">
+      <div class="sc-top"><input class="t sc-name" data-secv="${x.id}.name" id="i_sn_${x.id}" value="${esc(x.name)}" dir="ltr" aria-label="سیکشن کا نام"><span class="pill2"><bdi dir="ltr">${x.sys==="*"?"سب سسٹم":esc(x.sys)}</bdi></span><span style="flex:1"></span><button class="btn sm ghost" data-act="secedit" data-id="${x.id}" aria-label="ترمیم">✎</button><button class="btn sm ghost danger" data-act="secdel" data-id="${x.id}" aria-label="ہٹائیں">×</button></div>
+      <div class="sc-where"><b>${esc(roleName(x.role))}</b> ${ds.length?ds.map(k=>`<span class="pill2">${esc(DESIGNS[k].n)}</span>`).join(""):`<span class="warn">کسی ڈیزائن میں نہیں</span>`}</div>
+      <div class="sc-nums"><label>Dull<input class="n" data-secv="${x.id}.dull" id="i_sd_${x.id}" value="${esc(x.dull)}" inputmode="decimal"></label><label>Ch<input class="n" data-secv="${x.id}.ch" id="i_sc_${x.id}" value="${esc(x.ch??"")}" placeholder="${esc(x.dull)}" inputmode="decimal"></label><label>لمبائیاں (فٹ)<input class="t" data-stock="${esc(x.name)}" id="i_st_${x.id}" value="${esc((A.stock||{})[x.name]||"")}" placeholder="${f2(num(A.barLen))}" dir="ltr"></label></div></div>`}).join("")||`<p class="note">اس سسٹم میں ابھی کوئی سیکشن نہیں۔</p>`}</div>
+  <h3>شیشے کی قسمیں (فی مربع فٹ)</h3>
+  <div class="tw"><table><tbody>${A.glass.map((g,i)=>`<tr><td><input class="t" data-k2="al.glass.${i}.n" id="i_gn_${i}" value="${esc(g.n)}" aria-label="شیشے کا نام"></td><td class="n"><input class="n" data-k="al.glass.${i}.r" id="i_gr_${i}" value="${esc(g.r)}" inputmode="decimal" aria-label="ریٹ"></td><td><button class="btn sm ghost danger" data-act="gdel" data-i="${i}" aria-label="ہٹائیں">×</button></td></tr>`).join("")}</tbody></table></div>
+  <button class="btn sm" data-act="gadd" style="align-self:flex-start">+ شیشے کی قسم</button>
+  <h3>ڈیزائن کے سیکشن قواعد</h3>
+  <p class="note">ہر ٹکڑے کی لمبائی = (W × a + H × b + روشندان × v + c) ÷ d فٹ، اور فی کھڑکی اتنے ٹکڑے۔ سلائیڈنگ کے قواعد آپ کے کاریگر کی شیٹ سے ملائے گئے ہیں: 4×4 کھڑکی میں DC 26 F 4½، DC 30 F 13، M 28 / M 23 / M 24 8، D29 16 فٹ؛ ${num(S.al.bulkN)} سے زیادہ کھڑکیوں پر DC 26 F 4¼ اور DC 30 F 12½۔ دروازہ (3½×7): D 54 F 18، D 59 18، D 52 3½، D 46 3½۔ "c (… کھڑکیاں)" خالی ہو تو عام c لگتا ہے۔</p><p class="note"></p>
+  <div class="subtabs" id="ruleTabs">${Object.entries(DESIGNS).map(([k,d])=>`<button data-rule="${k}" aria-pressed="${ruleSel===k}">${d.n}</button>`).join("")}</div>
+  <div id="ruleBox">${ruleHtml()}</div>
+  <button class="btn sm ghost" data-act="resetAll" style="align-self:flex-start">سب کچھ شروع والی حالت میں واپس</button>`;
+}
+let ruleSel="sl2",secF="*all",SF=null;
+const KIND_OF=k=>DESIGNS[k].kind==="door"||DESIGNS[k].door?"door":"win";
+/* add / change a section: name, system, where it goes (window or door, which designs, which place) and how long */
+function sfOpen(id){
+  const A=S.al,x=id?A.secs.find(v=>v.id===id):null;
+  if(x){const ds=designsUsing(x.role),r=(ds.map(k=>(A.rules[k]||[]).find(p=>p.r===x.role)).find(Boolean))||{};
+    SF={id:x.id,name:x.name,sys:x.sys,role:x.role,newRole:"",kind:ds.length&&ds.every(k=>KIND_OF(k)==="door")?"door":ds.some(k=>KIND_OF(k)==="door")?"both":"win",designs:new Set(ds),f:{p:r.p??1,a:r.a??0,b:r.b??0,c:r.c??0,d:r.d??1},dull:x.dull,ch:x.ch??"",len:(A.stock||{})[x.name]||""}}
+  else SF={id:null,name:"",sys:secF!=="*all"?secF:(A.sys[0]||{}).name,role:"",newRole:"",kind:"win",designs:new Set(),f:{p:2,a:0,b:1,c:0,d:1},dull:"",ch:"",len:""};
+}
+function secFormHtml(){
+  const A=S.al,f=SF,used=f.role&&f.role!=="__new"?new Set(designsUsing(f.role)):new Set();
+  const list=Object.entries(DESIGNS).filter(([k])=>f.kind==="both"||KIND_OF(k)===f.kind);
+  const needF=[...f.designs].some(k=>!used.has(k));
+  const old=f.role&&f.role!=="__new"?A.secs.find(x=>x.role===f.role&&x.sys===f.sys&&x.id!==f.id):null;
+  const ex=Math.max(0,(num(f.f.a)*4+num(f.f.b)*4+num(f.f.c))/(num(f.f.d)||1));
+  return `<div class="secform" id="secForm"><h3>${f.id?"سیکشن میں ترمیم":"نیا سیکشن"}</h3>
+    <div class="fields">
+      <label class="f"><span>سیکشن کا نام</span><input class="t" data-sf="name" id="sf_name" value="${esc(f.name)}" dir="ltr" placeholder="مثلاً DC 32 F"></label>
+      <label class="f"><span>سسٹم</span><select data-sfs="sys" id="sf_sys">${A.sys.map(x=>`<option value="${esc(x.name)}" ${f.sys===x.name?"selected":""}>${esc(x.name)}</option>`).join("")}<option value="*" ${f.sys==="*"?"selected":""}>سب سسٹم (ہر جگہ یہی)</option></select></label>
+      <label class="f"><span>ریٹ Dull (فی فٹ)</span><input class="n" data-sf="dull" id="sf_dull" value="${esc(f.dull)}" inputmode="decimal"></label>
+      <label class="f"><span>ریٹ Ch (خالی = Dull)</span><input class="n" data-sf="ch" id="sf_ch" value="${esc(f.ch)}" inputmode="decimal"></label>
+      <label class="f"><span>لمبائیاں (فٹ)</span><input class="t" data-sf="len" id="sf_len" value="${esc(f.len)}" dir="ltr" placeholder="15, 17, 19"></label>
+    </div>
+    <div class="f"><span>کہاں لگے گا؟</span><div class="seg">${[["win","کھڑکی میں"],["door","دروازے میں"],["both","دونوں"]].map(([k,l])=>`<button type="button" data-sfkind="${k}" aria-pressed="${f.kind===k}">${l}</button>`).join("")}</div></div>
+    <label class="f"><span>کس جگہ؟ (کھڑکی / دروازے کا کون سا حصہ)</span><select data-sfs="role" id="sf_role"><option value="">— جگہ چنیں —</option>${roleList().map(([r,ur])=>`<option value="${r}" ${f.role===r?"selected":""}>${esc(ur)}</option>`).join("")}<option value="__new" ${f.role==="__new"?"selected":""}>+ نئی جگہ (مثلاً جالی کا فریم)</option></select></label>
+    ${f.role==="__new"?`<label class="f"><span>نئی جگہ کا نام</span><input class="t" data-sf="newRole" id="sf_newRole" value="${esc(f.newRole)}" placeholder="مثلاً جالی کا فریم" style="width:100%"></label>`:""}
+    ${f.role?`<div class="f"><span>کن ڈیزائنوں میں؟</span><div class="chk">${list.map(([k,d])=>`<label class="${used.has(k)?"has":""}"><input type="checkbox" data-sfd="${k}" ${f.designs.has(k)?"checked":""}> ${esc(d.n)}</label>`).join("")}</div>
+      ${used.size?`<p class="note">سبز کنارے والے ڈیزائنوں میں یہ جگہ پہلے سے ہے، وہاں ناپ کا فارمولا وہی رہے گا۔</p>`:""}</div>`:""}
+    ${f.role&&(needF||f.role==="__new")?`<div class="f"><span>ہر کھڑکی / دروازے میں ناپ (نئے ڈیزائنوں کے لیے)</span>
+      <div class="fx2"><label>ٹکڑے<input class="n" data-sff="p" id="sf_p" value="${esc(f.f.p)}" inputmode="decimal"></label><label>چوڑائی ×<input class="n" data-sff="a" id="sf_a" value="${esc(f.f.a)}" inputmode="decimal"></label><label>اونچائی ×<input class="n" data-sff="b" id="sf_b" value="${esc(f.f.b)}" inputmode="decimal"></label><label>+ فٹ<input class="n" data-sff="c" id="sf_c" value="${esc(f.f.c)}" inputmode="decimal"></label><label>÷<input class="n" data-sff="d" id="sf_d" value="${esc(f.f.d)}" inputmode="decimal"></label></div>
+      <p class="note" id="sfEx">مثال: 4×4 کی کھڑکی میں ${f2(num(f.f.p))} ٹکڑے × ${ftin(ex)} = ${f2(num(f.f.p)*ex)} فٹ۔ (مثلاً سائیڈ کے دو ٹکڑے: ٹکڑے 2، اونچائی × 1)</p></div>`:""}
+    ${old?`<p class="warn">${esc(f.sys==="*"?"":f.sys+" میں ")}اس جگہ پہلے سے ${esc(old.name)} لگا ہے — یہ نیا سیکشن اس کی جگہ لے لے گا۔</p>`:""}
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="sfsave">محفوظ کریں</button><button class="btn" data-act="sfcancel">منسوخ</button></div></div>`;
+}
+function sfRender(){const b=$("#secFormBox");if(b)b.innerHTML=SF?secFormHtml():""}
+function sfSave(){
+  const A=S.al,f=SF;const name=String(f.name||"").trim();
+  if(!name){toast("سیکشن کا نام لکھیں");return}
+  if(!f.role){toast("جگہ چنیں");return}
+  let role=f.role;
+  if(role==="__new"){const n=String(f.newRole||"").trim();if(!n){toast("نئی جگہ کا نام لکھیں");return}role="c"+Date.now().toString(36);A.roles.push([role,n,""])}
+  if(!f.designs.size){toast("کم از کم ایک ڈیزائن چنیں");return}
+  for(const k of Object.keys(DESIGNS)){const rs=A.rules[k]=A.rules[k]||structuredClone(DESIGNS[k].rules),has=rs.some(p=>p.r===role);
+    if(f.designs.has(k)&&!has)rs.push(P(role,num(f.f.a),num(f.f.b),num(f.f.c),num(f.f.p)||1,num(f.f.d)||1));
+    if(!f.designs.has(k)&&has&&!CORE.has(role))A.rules[k]=rs.filter(p=>p.r!==role);}
+  A.secs=A.secs.filter(x=>!(x.role===role&&x.sys===f.sys&&x.id!==f.id));
+  const rec={id:f.id||"u"+Date.now().toString(36),name,sys:f.sys,role,dull:num(f.dull),ch:f.ch===""?"":num(f.ch)};
+  const i=A.secs.findIndex(x=>x.id===rec.id);if(i>=0)A.secs[i]=rec;else A.secs.push(rec);
+  A.stock=A.stock||{};if(String(f.len).trim())A.stock[name]=String(f.len).trim();
+  SF=null;save();render();$("details.set").open=true;toast("سیکشن محفوظ");
+  setTimeout(()=>{const t=$("#secTabs");if(t)t.scrollIntoView({block:"start"})},50);
+}
+function ruleHtml(){
+  const rs_=S.al.rules[ruleSel]||[];
+  return `<div class="tw"><table><thead><tr><th>کام</th><th class="n">a (W)</th><th class="n">b (H)</th><th class="n">v</th><th class="n">c (فٹ)</th><th class="n">c (${num(S.al.bulkN)}+ کھڑکیاں)</th><th class="n">÷ d</th><th class="n">ٹکڑے</th><th></th></tr></thead><tbody>
+  ${rs_.map((p,i)=>`<tr><td><select data-rsel="${i}" id="i_rr_${i}" aria-label="کام">${roleList().map(([r,ur])=>`<option value="${r}" ${p.r===r?"selected":""}>${esc(ur)}</option>`).join("")}</select></td>
+    ${["a","b","v","c","c2","d","p"].map(k=>`<td class="n"><input class="n" style="width:62px" data-rk="${i}.${k}" id="i_r_${i}_${k}" value="${esc(p[k]??"")}" inputmode="decimal" aria-label="${k}"></td>`).join("")}
+    <td><button class="btn sm ghost danger" data-act="rdel" data-i="${i}" aria-label="ہٹائیں">×</button></td></tr>`).join("")}
+  </tbody></table></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" data-act="radd">+ ٹکڑا</button><button class="btn sm ghost" data-act="rreset">اس ڈیزائن کے قواعد واپس</button></div>`;
+}
+function itemTitle(it){const D=DESIGNS[it.d],g=geom(it);return `${esc(it.label||D.n)} · ${ftin(g.W)} × ${ftin(g.H)}`}
+function renderPreview(){
+  const A=S.al,f=A.form,g=geom(f),D=DESIGNS[f.d];
+  $("#pvTitle").innerHTML=`${esc(D.n)} <small>${ftin(g.W)} × ${ftin(g.H)} · ${f2(g.W*g.H)} sq ft</small>`;
+  $("#stage").innerHTML=g.W>0&&g.H>0?drawSvg(f.d,g.W,g.H,g.V,{big:1}):`<p class="note">چوڑائی اور اونچائی لکھیں</p>`;
+  const bulk=jobWindows(editIdx>=0||DESIGNS[f.d].kind==="door"?0:Math.max(1,num(f.q)))>num(A.bulkN);
+  const all=A.sys.map((_,i)=>priceIt(f,i,bulk)),min=Math.min(...all.map(x=>x.total));
+  $("#pvCmp").innerHTML=all.map((x,i)=>`<button type="button" data-pick="${i}" aria-pressed="${f.sys==i}" class="${x.total===min?"low":""}"><span>${esc(x.sy.name)}</span><b>${rs(x.total)}</b><small>${rs(x.area?x.total/x.area:0)} فی مربع فٹ</small></button>`).join("");
+  const p=all[f.sys]||all[0];
+  $("#pvSecs").innerHTML=`<div class="tw"><table><thead><tr><th>سیکشن</th><th class="n">ٹکڑے</th><th class="n">فٹ</th><th class="n">ریٹ</th><th class="n">قیمت</th></tr></thead><tbody>
+    ${p.secs.map(s=>`<tr><td class="sec">${esc(s.name)}<span class="fx">${s.cuts.map(c=>c.pcs+" × "+ftin(c.len)).join(" + ")}</span></td><td class="n">${s.cuts.reduce((a,c)=>a+c.pcs,0)}</td><td class="n">${f2(s.ft)}</td><td class="n">${f2(s.rate,0)}</td><td class="n">${f2(s.price,0)}</td></tr>`).join("")}
+    <tr><td>شیشہ <span class="fx">${f2(p.glassArea)} sq ft · ${esc(p.gName)}</span></td><td></td><td></td><td></td><td class="n">${f2(p.glass,0)}</td></tr>
+    <tr><td>دیگر + مزدوری</td><td></td><td></td><td></td><td class="n">${f2(p.other+p.labour,0)}</td></tr>
+    ${p.margin?`<tr><td>منافع</td><td></td><td></td><td></td><td class="n">${f2(p.margin,0)}</td></tr>`:""}
+    <tr class="tot"><td>کل (${p.q} عدد)</td><td></td><td></td><td></td><td class="n">${f2(p.total,0)}</td></tr></tbody></table></div>
+    <p class="note">ڈسکاؤنٹ ${f2(num(A.disc))}٪ سیکشن کی قیمت پر لگا ہے۔ ${bulk?`کام میں ${num(A.bulkN)} سے زیادہ کھڑکیاں ہیں، اس لیے DC 26 F اور DC 30 F پر کم الاؤنس لگا ہے۔`:""}</p>
+    ${p.missing.length?`<p class="warn">ان سیکشن کا ریٹ نہیں لگا: ${p.missing.map(esc).join("، ")}۔ "ریٹ اور سیٹنگ" میں ڈالیں۔</p>`:""}`;
+}
+function renderItems(){
+  const A=S.al,Q=quote();
+  $("#items").innerHTML=Q.rows.length?Q.rows.map(({it,p},i)=>{const g=geom(it);return `<div class="item">${drawSvg(it.d,g.W,g.H,g.V)}<div style="min-width:0"><b>${itemTitle(it)}</b> × ${p.q}<div class="note">${esc(DESIGNS[it.d].n)} · <bdi dir="ltr">${esc(p.sy.name)}</bdi> · ${it.fin==="dull"?"Dull":"Ch"} · ${esc(p.gName)}${p.missing.length?' · <span class="warn" style="display:inline">ریٹ ادھورے</span>':""}</div></div>
+    <div><div class="p">${rs(p.total)}</div><div class="acts"><button class="btn sm ghost" data-act="edit" data-i="${i}">ترمیم</button><button class="btn sm ghost" data-act="dup" data-i="${i}" aria-label="کاپی">⧉</button><button class="btn sm ghost danger" data-act="del" data-i="${i}" aria-label="ہٹائیں">×</button></div></div></div>`}).join(""):`<div class="empty">اوپر سے ڈیزائن چن کر پہلی کھڑکی شامل کریں۔</div>`;
+  $("#qTotals").innerHTML=Q.rows.length?`<div class="kv"><div><span>کھڑکیاں / دروازے</span><b>${Q.rows.reduce((a,r)=>a+r.p.q,0)}</b></div><div><span>کل رقبہ (sq ft)</span><b>${f2(Q.area)}</b></div><div><span>شیشہ (sq ft)</span><b>${f2(Q.glassArea)}</b></div><div><span>اوسط فی مربع فٹ</span><b>${rs(Q.area?Q.total/Q.area:0)}</b></div></div>
+    <div class="total"><span>کوٹیشن کی کل رقم</span><b>${rs(Q.total)}</b></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="copy">کوٹیشن کاپی کریں</button><button class="btn ghost danger" data-act="clear">سب ہٹائیں</button></div>`:"";
+  renderDetail(Q);
+}
+function renderDetail(Q){
+  const A=S.al,el=$("#detail");Q=Q||quote();
+  if(!Q.rows.length){el.innerHTML=`<p class="note">کوٹیشن میں کھڑکیاں شامل کریں تو یہاں سیکشن، کٹنگ لسٹ اور شیشے کی تفصیل آئے گی۔</p>`;return}
+  if(A.view==="cost"){
+    el.innerHTML=`<div class="tw"><table><thead><tr><th>سیکشن</th><th>سسٹم</th><th class="n">کل فٹ</th><th class="n">قیمت (ڈسکاؤنٹ کے بعد)</th></tr></thead><tbody>
+      ${Q.mat.map(m=>`<tr><td class="sec">${esc(m.name)}</td><td><bdi dir="ltr">${esc(m.sys)}</bdi></td><td class="n">${f2(m.ft)}</td><td class="n">${f2(m.amt,0)}</td></tr>`).join("")}
+      <tr class="tot"><td>ایلومینیم کل</td><td></td><td class="n">${f2(Q.mat.reduce((a,m)=>a+m.ft,0))}</td><td class="n">${f2(Q.mat.reduce((a,m)=>a+m.amt,0),0)}</td></tr></tbody></table></div>`;
+  }else if(A.view==="cut"){
+    el.innerHTML=Q.rows.map(({it,p},i)=>`<h3>${i+1}. ${itemTitle(it)} × ${p.q}</h3><div class="tw"><table><thead><tr><th>سیکشن</th><th class="n">لمبائی</th><th class="n">انچ</th><th class="n">ٹکڑے</th></tr></thead><tbody>
+      ${p.secs.flatMap(s=>s.cuts.map(c=>`<tr><td class="sec">${esc(s.name)}</td><td class="n">${ftin(c.len)}</td><td class="n">${f2(c.len*12,2)}</td><td class="n">${c.pcs}</td></tr>`)).join("")}</tbody></table></div>`).join("");
+  }else if(A.view==="bars"){
+    const big=Math.max(...Q.mat.flatMap(m=>m.lens));
+    el.innerHTML=`<p class="note">ہر سیکشن اپنی دستیاب لمبائیوں (سیٹنگ میں) میں سے اس طرح چنا ہے کہ کم سے کم فٹ خریدنے پڑیں۔ ${Q.bulk?`<b>کام میں ${num(A.bulkN)} سے زیادہ کھڑکیاں ہیں، اس لیے کم الاؤنس لگا ہے۔</b>`:""}</p>
+      <div class="tw"><table><thead><tr><th>سیکشن</th><th>خریدیں</th><th class="n">کل فٹ</th><th class="n">لگے گا</th><th class="n">بچت</th></tr></thead><tbody>
+      ${Q.mat.map(m=>`<tr><td class="sec">${esc(m.name)}</td><td><bdi dir="ltr" class="buy">${m.buy.map(b=>`${b.n} × ${f2(b.len)}′`).join(" + ")||"—"}</bdi></td><td class="n">${f2(m.buyFt)}</td><td class="n">${f2(m.ft)}</td><td class="n">${f2(m.waste)}</td></tr>`).join("")}
+      <tr class="tot"><td>کل</td><td>${Q.mat.reduce((a,m)=>a+m.bars.length,0)} لمبائیاں</td><td class="n">${f2(Q.mat.reduce((a,m)=>a+m.buyFt,0))}</td><td class="n">${f2(Q.mat.reduce((a,m)=>a+m.ft,0))}</td><td class="n">${f2(Q.mat.reduce((a,m)=>a+m.waste,0))}</td></tr></tbody></table></div>`
+      +Q.mat.map(m=>`<h3><bdi dir="ltr">${esc(m.name)}</bdi> <span class="note">· <bdi dir="ltr">${m.buy.map(b=>`${b.n} × ${f2(b.len)}′`).join(" + ")}</bdi> · بچت ${f2(m.waste)} فٹ</span></h3>
+      ${m.over?`<p class="warn">${m.over} ٹکڑے سب سے لمبی لمبائی سے بڑے ہیں، انہیں جوڑنا پڑے گا۔</p>`:""}
+      <div class="bars">${m.bars.map(b=>`<div class="bar" style="width:${b.len/big*100}%" title="${f2(b.len)} فٹ: ${b.cuts.map(c=>ftin(c)).join(" + ")}">${b.cuts.map(c=>`<i style="width:${Math.min(100,c/b.len*100)}%">${ftin(c)}</i>`).join("")}</div>`).join("")}</div>`).join("");
+  }else{
+    const rows=Q.rows.flatMap(({it,p})=>p.panes.map(x=>({t:itemTitle(it),w:x.w,h:x.h,c:x.c*p.q})));
+    el.innerHTML=`<div class="tw"><table><thead><tr><th>کھڑکی</th><th class="n">چوڑائی ″</th><th class="n">اونچائی ″</th><th class="n">تعداد</th><th class="n">sq ft</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${r.t}</td><td class="n">${f2(r.w*12,2)}</td><td class="n">${f2(r.h*12,2)}</td><td class="n">${r.c}</td><td class="n">${f2(r.w*r.h*r.c)}</td></tr>`).join("")}
+      <tr class="tot"><td>کل</td><td></td><td></td><td class="n">${rows.reduce((a,r)=>a+r.c,0)}</td><td class="n">${f2(rows.reduce((a,r)=>a+r.w*r.h*r.c,0))}</td></tr></tbody></table></div>
+      <p class="note">شیشہ پلّے کے سائز سے چوڑائی میں ${f2(num(A.gw))}″ اور اونچائی میں ${f2(num(A.gh))}″ کم رکھا ہے (سیٹنگ میں بدلیں)۔</p>`;
+  }
+}
+function quoteText(){
+  const Q=quote();
+  return `*ایلومینیم کوٹیشن · وارثی ہارڈویئر*\n\n`+Q.rows.map(({it,p},i)=>`${i+1}. ${(it.label?it.label+" · ":"")+DESIGNS[it.d].n}\n   ${ftin(p.W)} × ${ftin(p.H)} × ${p.q} · ${p.sy.name} ${it.fin==="dull"?"Dull":"Ch"} · ${p.gName}\n   ${rs(p.total)}`).join("\n")+`\n\nکل رقبہ: ${f2(Q.area)} مربع فٹ\nاوسط: ${rs(Q.area?Q.total/Q.area:0)} فی مربع فٹ\n*کل رقم: ${rs(Q.total)}*`;
+}
+function calcAl(full){
+  save();
+  const f=S.al.form;$("#ventF").hidden=!DESIGNS[f.d].vent;
+  renderPreview();renderItems();
+}
+
+/* ===================== paneling, ceiling, wallpaper (formulas from the shop's sheet) ===================== */
+function panCalc(){
+  const P=S.pan,ar=a=>num(a[0])*num(a[1]);
+  const dedIn=ar(P.win1)+ar(P.door1)+ar(P.win2)+ar(P.door2)+ar(P.door3);       // J5
+  const dedFt=dedIn/144;                                                       // J6
+  const circ=2*(num(P.L)+num(P.Wd));                                           // C10
+  const area=circ*num(P.height);                                               // C11
+  const panalsC12=(circ*12)/num(P.panelWidth||1);                              // C12
+  const panalsJ7=num(P.panelArea)>0?up(area-dedFt)/num(P.panelArea):0;         // J7
+  const totalDed=down(dedFt);                                                  // C13
+  const totalPanals=up(panalsJ7)+num(P.extra);                                 // C14
+  const golaLen=circ*num(P.golaRows)+num(P.golaPerDW)*num(P.nDW);              // C15
+  const golas=num(P.golaLen)>0?up(golaLen/num(P.golaLen)):0;                   // C16
+  const cPan=num(P.ratePanel)*totalPanals,cGola=num(P.rateGola)*golas,cLab=num(P.labour)*totalPanals;
+  const total=cPan+cGola+cLab+num(P.nail)+num(P.alfi);                         // F15
+  return {dedIn,dedFt,circ,area,panalsC12,panalsJ7,totalDed,totalPanals,golaLen,golas,cPan,cGola,cLab,total};
+}
+function ceilCalc(){
+  const P=S.pan,C=S.ceil,L=num(P.L),W=num(P.Wd),area=L*W;
+  return {L,W,area,amount:area*num(C.rate),sheets:area/num(C.sheetArea||1),tee:area/num(C.teeDiv||1),angle:2*(L+W)/num(C.angleLen||1)};
+}
+function wpCalc(){
+  const P=S.wp,size=2*(num(P.L)+num(P.Wd)),area=size*num(P.H),digit=area/num(P.perRoll||1),rolls=up(digit);
+  return {size,area,flex:area*num(P.flexRate),digit,rolls,wpAmount:rolls*num(P.rollRate)+rolls*num(P.labour)};
+}
+
+/* ============ UI helpers ============ */
+
+const F=(ur,en,path,o={})=>`<label class="f"><span>${ur}<i class="en">${en}</i></span><input class="n" id="i_${path.replace(/\./g,"_")}" data-k="${path}" inputmode="decimal" value="${esc(get(path))}"${o.ph?` placeholder="${o.ph}"`:""}></label>`;
+const R=(ur,en,val,o={})=>`<div class="rr${o.money?" money":""}"><div class="k"><span>${ur}</span><span class="en">${en}</span></div><div class="v">${val}${o.sub?`<small>${o.sub}</small>`:""}</div></div>`;
+function viewPan(){
+  const P=S.pan,ded=(ur,en,key)=>`<div class="ded"><b>${ur} <i class="en">${en}</i></b>${F("لمبائی ″","Length",`pan.${key}.0`)}${F("چوڑائی ″","Width",`pan.${key}.1`)}</div>`;
+  return `<div class="grid"><div class="col">
+  <section class="panel"><h2>پینلنگ <small>Panaling Formula</small></h2>
+    <div class="fields">
+      ${F("لمبائی (فٹ)","Length","pan.L")}${F("چوڑائی (فٹ)","Width","pan.Wd")}${F("دروازے اور کھڑکیاں (تعداد)","No. of Doors & Windows","pan.nDW")}
+      ${F("ریٹ فی پینل","Rate / Panal","pan.ratePanel")}${F("ریٹ فی گولا","Rate / Gola","pan.rateGola")}${F("مزدوری فی پینل","Labour Rate / Panal","pan.labour")}
+    </div>
+  </section>
+  <section class="panel"><h2>کٹوتی (انچ میں) <small>Deductions</small></h2>
+    ${ded("کھڑکی 1","Window 1","win1")}${ded("کھڑکی 2","Window 2","win2")}${ded("دروازہ 1","Door 1","door1")}${ded("دروازہ 2","Door 2","door2")}${ded("دروازہ 3","Door 3","door3")}
+  </section>
+  <section class="panel"><h2>دیگر خرچ</h2><div class="fields">${F("اسٹیل کیل","Steel Nail","pan.nail")}${F("ایلفی","Alfi","pan.alfi")}</div></section>
+  <section class="panel"><details class="set"><summary>فارمولے کے نمبر (شیٹ میں لکھے ہوئے)</summary><div class="fields">
+    ${F("دیوار کی اونچائی (فٹ)","Total Area = C10 × 9.5","pan.height")}${F("ایک پینل کا رقبہ (مربع فٹ)","Panals = … / 7.91","pan.panelArea")}${F("پینل کی چوڑائی (انچ)","Panals = C10×12 / 10","pan.panelWidth")}
+    ${F("فالتو پینل","Total Panals = … + 2","pan.extra")}${F("گولے کی قطاریں","Gola = C10 × 2","pan.golaRows")}${F("فی دروازہ/کھڑکی گولا (فٹ)","+ 30 × No.","pan.golaPerDW")}${F("گولے کی لمبائی (فٹ)","No. of Gola = … / 10","pan.golaLen")}
+  </div></details></section>
+  </div><div class="col sticky"><section class="panel" id="panRes" aria-live="polite"></section></div></div>`;
+}
+function viewCeil(){
+  return `<div class="grid"><div class="col">
+  <section class="panel"><h2>سیلنگ کا تخمینہ <small>Ceiling Estimate (WARSI H/W)</small></h2>
+    <p class="note">لمبائی اور چوڑائی پینلنگ والی ہی ہیں (جیسے شیٹ میں Panaling!C4 اور C5)۔ یہاں بدلیں تو وہاں بھی بدل جائیں گی۔</p>
+    <div class="fields">${F("لمبائی (فٹ)","Length","pan.L")}${F("چوڑائی (فٹ)","Width","pan.Wd")}${F("ریٹ (فی مربع فٹ)","Rate","ceil.rate")}</div>
+  </section>
+  <section class="panel"><details class="set"><summary>فارمولے کے نمبر (شیٹ میں لکھے ہوئے)</summary><div class="fields">
+    ${F("ایک شیٹ کا رقبہ","Ceiling Sheets = Area / 4","ceil.sheetArea")}${F("4 فٹ ٹی کا بھاگ","4ft Tee = Area / 4.25","ceil.teeDiv")}${F("اینگل کی لمبائی (فٹ)","Side Angle = 2(L+W) / 10","ceil.angleLen")}
+  </div></details></section>
+  </div><div class="col sticky"><section class="panel" id="ceilRes" aria-live="polite"></section></div></div>`;
+}
+function viewWp(){
+  return `<div class="grid"><div class="col">
+  <section class="panel"><h2>کمرے کا سائز <small>Room Size</small></h2>
+    <div class="fields">${F("لمبائی (فٹ)","Length","wp.L")}${F("چوڑائی (فٹ)","Width","wp.Wd")}${F("اونچائی (فٹ)","Height","wp.H")}</div>
+  </section>
+  <section class="panel"><h2>ریٹ</h2>
+    <div class="fields">${F("پینافلیکس ریٹ (فی مربع فٹ)","Panaflex Rate","wp.flexRate")}${F("رول ریٹ","Rool Rate","wp.rollRate")}${F("وال پیپر مزدوری (فی رول)","Wallpaper Labour","wp.labour")}</div>
+  </section>
+  <section class="panel"><details class="set"><summary>فارمولے کا نمبر (شیٹ میں لکھا ہوا)</summary><div class="fields">
+    ${F("ایک رول سے کتنے مربع فٹ","Rool in digit = Area / 300","wp.perRoll")}
+  </div></details></section>
+  </div><div class="col sticky"><section class="panel" id="wpRes" aria-live="polite"></section></div></div>`;
+}
+
+let lastText="";
+function calcOther(){
+  if(S.tab==="pan"){
+    const T=panCalc();
+    $("#panRes").innerHTML=`<h2>نتیجہ</h2><div class="rows">
+      ${R("کل کٹوتی (مربع انچ)","Total Deductions",f2(T.dedIn))}
+      ${R("کٹوتی (مربع فٹ)","Deductions in Ft",f2(T.dedFt))}
+      ${R("گھیر (فٹ)","Cercumference = 2(L+W)",f2(T.circ))}
+      ${R("کل رقبہ (مربع فٹ)","Total Area = C10 × "+f2(num(S.pan.height)),f2(T.area))}
+      ${R("پینل","Panals = C10×12 / "+f2(num(S.pan.panelWidth)),f2(T.panalsC12))}
+      ${R("پینل (کٹوتی کے بعد)","Panals = ROUNDUP(C11−J6) / "+f2(num(S.pan.panelArea)),f2(T.panalsJ7))}
+      ${R("کل کٹوتی","Total Deductions = ROUNDDOWN(J6)",f2(T.totalDed))}
+      ${R("کل پینل","Total Panals = ROUNDUP(J7) + "+f2(num(S.pan.extra)),f2(T.totalPanals))}
+      ${R("گولے کی لمبائی (فٹ)","Length of Gola",f2(T.golaLen))}
+      ${R("گولے","No. of Gola = ROUNDUP(C15 / "+f2(num(S.pan.golaLen))+")",f2(T.golas))}
+      ${R("پینل کی قیمت","Cost of Panals",f2(T.cPan),{money:1})}
+      ${R("گولوں کی قیمت","Cost of Golas",f2(T.cGola),{money:1})}
+      ${R("مزدوری","Labour",f2(T.cLab),{money:1})}
+      ${R("اسٹیل کیل","Steel Nail",f2(num(S.pan.nail)),{money:1})}
+      ${R("ایلفی","Alfi",f2(num(S.pan.alfi)),{money:1})}
+    </div><div class="total"><span>کل خرچ <i class="en" style="color:#cfe3dc">Total Cost</i></span><b>${rs(T.total)}</b></div>
+    <button class="btn" data-act="copy">تخمینہ کاپی کریں</button>`;
+    lastText=`*پینلنگ کا تخمینہ*\nکمرہ: ${f2(num(S.pan.L))} × ${f2(num(S.pan.Wd))} فٹ\nکل پینل: ${T.totalPanals} × ${rs(num(S.pan.ratePanel))} = ${rs(T.cPan)}\nگولے: ${T.golas} × ${rs(num(S.pan.rateGola))} = ${rs(T.cGola)}\nمزدوری: ${rs(T.cLab)}\nاسٹیل کیل: ${rs(num(S.pan.nail))}\nایلفی: ${rs(num(S.pan.alfi))}\n*کل: ${rs(T.total)}*\n— وارثی ہارڈویئر`;
+    return;
+  }
+  if(S.tab==="ceil"){
+    const T=ceilCalc();
+    $("#ceilRes").innerHTML=`<h2>نتیجہ</h2><div class="rows">
+      ${R("کل رقبہ (مربع فٹ)","Total Area = L × W",f2(T.area))}
+      ${R("کل رقم","Total Amount = Area × Rate",f2(T.amount),{money:1})}
+      ${R("سیلنگ شیٹیں","Ceiling Sheets = Area / "+f2(num(S.ceil.sheetArea)),f2(T.sheets),{sub:`یعنی ${up(T.sheets)} عدد`})}
+      ${R("4 فٹ ٹی","4ft Tee = Area / "+f2(num(S.ceil.teeDiv)),f2(T.tee),{sub:`یعنی ${up(T.tee)} عدد`})}
+      ${R("سائیڈ اینگل","No. of Side Angle",f2(T.angle),{sub:`یعنی ${up(T.angle)} عدد`})}
+    </div><div class="total"><span>کل رقم <i class="en" style="color:#cfe3dc">Total Amount</i></span><b>${rs(T.amount)}</b></div>
+    <button class="btn" data-act="copy">تخمینہ کاپی کریں</button>`;
+    lastText=`*سیلنگ کا تخمینہ*\nکمرہ: ${f2(T.L)} × ${f2(T.W)} فٹ = ${f2(T.area)} مربع فٹ\nریٹ: ${rs(num(S.ceil.rate))} فی مربع فٹ\nسیلنگ شیٹیں: ${up(T.sheets)}\n4 فٹ ٹی: ${up(T.tee)}\nسائیڈ اینگل: ${up(T.angle)}\n*کل: ${rs(T.amount)}*\n— وارثی ہارڈویئر`;
+    return;
+  }
+  const T=wpCalc();
+  $("#wpRes").innerHTML=`<h2>نتیجہ</h2><div class="rows">
+    ${R("کل سائز (گھیر، فٹ)","Total Size = 2(L+W)",f2(T.size))}
+    ${R("کل رقبہ (مربع فٹ)","Total Area = Size × Height",f2(T.area))}
+    ${R("پینافلیکس کی رقم","Panaflex Amount",f2(T.flex),{money:1})}
+    ${R("وال پیپر رول (حساب)","Rool in digit = Area / "+f2(num(S.wp.perRoll)),f2(T.digit))}
+    ${R("وال پیپر رول","Wallpaper Rool = ROUNDUP",f2(T.rolls))}
+    ${R("وال پیپر کی رقم","Wallpaper Amount = Rolls × (Rate + Labour)",f2(T.wpAmount),{money:1})}
+  </div>
+  <div class="total"><span>پینافلیکس <i class="en" style="color:#cfe3dc">Panaflex</i></span><b>${rs(T.flex)}</b></div>
+  <div class="total"><span>وال پیپر رول <i class="en" style="color:#cfe3dc">Wallpaper</i></span><b>${rs(T.wpAmount)}</b></div>
+  <button class="btn" data-act="copy">تخمینہ کاپی کریں</button>`;
+  lastText=`*وال پیپر کا تخمینہ*\nکمرہ: ${f2(num(S.wp.L))} × ${f2(num(S.wp.Wd))} فٹ، اونچائی ${f2(num(S.wp.H))} فٹ\nکل رقبہ: ${f2(T.area)} مربع فٹ\n\nپینافلیکس: ${rs(T.flex)}\nوال پیپر: ${T.rolls} رول = ${rs(T.wpAmount)} (مزدوری سمیت)\n— وارثی ہارڈویئر`;
+}
+
+
+/* ===================== shell ===================== */
+function render(){
+  document.querySelectorAll("#tabs [data-tab]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.tab===S.tab));
+  $("#main").innerHTML={al:viewAl,pan:viewPan,ceil:viewCeil,wp:viewWp}[S.tab]();
+  if(S.tab==="al"){$("#settings").innerHTML=settingsHtml();calcAl(true)}else{save();calcOther()}
+}
+function refresh(){if(S.tab==="al")calcAl();else{save();calcOther()}}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-tab],[data-d],[data-fin],[data-pick],[data-view],[data-rule],[data-act],[data-secf],[data-sfkind]");if(!t)return;
+  const A=S.al,ds=t.dataset;
+  if(ds.tab){S.tab=ds.tab;render();return}
+  if(ds.d){A.form.d=ds.d;document.querySelectorAll("#designs .dz").forEach(b=>b.setAttribute("aria-pressed",b.dataset.d===ds.d));calcAl();return}
+  if(ds.fin){A.form.fin=ds.fin;document.querySelectorAll("#fin [data-fin]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.fin===ds.fin));calcAl();return}
+  if(ds.pick){A.form.sys=+ds.pick;const s=$("#i_al_form_sys");if(s)s.value=ds.pick;calcAl();return}
+  if(ds.view){A.view=ds.view;document.querySelectorAll("#views [data-view]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.view===ds.view));save();renderDetail();return}
+  if(ds.rule){ruleSel=ds.rule;document.querySelectorAll("#ruleTabs [data-rule]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.rule===ds.rule));$("#ruleBox").innerHTML=ruleHtml();return}
+  if(ds.secf){secF=ds.secf;render();$("details.set").open=true;setTimeout(()=>{const x=$("#secTabs");if(x)x.scrollIntoView({block:"start"})},30);return}
+  if(ds.sfkind){SF.kind=ds.sfkind;sfRender();return}
+  const a=ds.act,i=+ds.i;
+  if(a==="secnew"){sfOpen(null);sfRender();setTimeout(()=>{const x=$("#secForm");if(x){x.scrollIntoView({block:"start",behavior:"smooth"});$("#sf_name").focus()}},30);return}
+  if(a==="secedit"){sfOpen(ds.id);sfRender();setTimeout(()=>{const x=$("#secForm");if(x)x.scrollIntoView({block:"start",behavior:"smooth"})},30);return}
+  if(a==="sfcancel"){SF=null;sfRender();return}
+  if(a==="sfsave"){sfSave();return}
+  if(a==="secdel"){if(t.dataset.sure){S.al.secs=S.al.secs.filter(x=>x.id!==ds.id);save();render();$("details.set").open=true;toast("سیکشن ہٹا دیا")}else{t.dataset.sure="1";t.textContent="پکا؟";t.style.width="auto"}return}
+  if(a==="sysadd"){const A=S.al,from=secF!=="*all"&&secF!=="*"?secF:A.sys[0].name,src=A.sys.find(x=>x.name===from)||A.sys[0];let n=2,name;do{name="نیا سسٹم "+n++}while(A.sys.some(x=>x.name===name));
+    A.sys.push({name,other:src.other,labour:src.labour});for(const x of A.secs.filter(v=>v.sys===src.name))A.secs.push({...x,id:"u"+Date.now().toString(36)+Math.random().toString(36).slice(2,5),sys:name});
+    secF=name;save();render();$("details.set").open=true;toast(from+" کے سیکشن کاپی ہو گئے، اب نام اور ریٹ بدلیں");return}
+  if(a==="sysdel"){const A=S.al;if(A.sys.length<2)return;if(t.dataset.sure){const nm=A.sys[i].name;A.sys.splice(i,1);A.secs=A.secs.filter(x=>x.sys!==nm);for(const it of [...A.items,A.form]){if(+it.sys===i)it.sys=0;else if(+it.sys>i)it.sys=+it.sys-1}secF="*all";save();render();$("details.set").open=true}else{t.dataset.sure="1";t.textContent="پکا؟"}return}
+  if(a==="add"){const g=geom(A.form);if(!(g.W>0&&g.H>0)){toast("چوڑائی اور اونچائی لکھیں");return}
+    if(editIdx>=0){A.items[editIdx]={...A.form};editIdx=-1;toast("تبدیلی محفوظ")}else{A.items.push({...A.form});toast("کوٹیشن میں شامل")}
+    A.form.label="";render();return}
+  if(a==="cancelEdit"){editIdx=-1;render();return}
+  if(a==="edit"){editIdx=i;A.form={...A.items[i]};render();window.scrollTo({top:0,behavior:"smooth"});return}
+  if(a==="dup"){A.items.splice(i+1,0,{...A.items[i]});calcAl();return}
+  if(a==="del"){A.items.splice(i,1);if(editIdx===i)editIdx=-1;calcAl();return}
+  if(a==="clear"){if(t.dataset.sure){A.items=[];calcAl()}else{t.dataset.sure="1";t.textContent="پکا؟ سب ہٹائیں"}return}
+  if(a==="gadd"){A.glass.push({n:"نیا شیشہ",r:0});render();$("details.set").open=true;return}
+  if(a==="gdel"){if(A.glass.length>1){A.glass.splice(i,1);render();$("details.set").open=true}return}
+  if(a==="radd"){(A.rules[ruleSel]=A.rules[ruleSel]||[]).push(P("frame",0,0,0,1));$("#ruleBox").innerHTML=ruleHtml();calcAl();return}
+  if(a==="rdel"){A.rules[ruleSel].splice(i,1);$("#ruleBox").innerHTML=ruleHtml();calcAl();return}
+  if(a==="rreset"){A.rules[ruleSel]=structuredClone(DESIGNS[ruleSel].rules);$("#ruleBox").innerHTML=ruleHtml();calcAl();return}
+  if(a==="resetAll"){if(t.dataset.sure){const items=A.items;S.al=structuredClone(DEF.al);S.al.items=items;S.al.secs=secsFromSys(S.al.sys);S.al.roles=[];render();toast("ریٹ اور قواعد شروع والے")}else{t.dataset.sure="1";t.textContent="پکا؟ ریٹ اور قواعد واپس"}return}
+  if(a==="copy"){const text=S.tab==="al"?quoteText():lastText,done=()=>toast("کاپی ہو گیا، واٹس ایپ میں پیسٹ کریں");
+    if(navigator.clipboard)navigator.clipboard.writeText(text).then(done).catch(()=>showCopy(text));else showCopy(text)}
+});
+function showCopy(text){const box=document.createElement("textarea");box.className="copy";box.value=text;box.readOnly=true;(document.querySelector("#qTotals")||document.querySelector("#main .col")).appendChild(box);box.focus();box.select();toast("متن چن لیا گیا ہے، کاپی کر لیں")}
+document.addEventListener("input",e=>{
+  const t=e.target,ds=t.dataset;
+  if(ds.k){set(ds.k,t.value===""?"":num(t.value));refresh();return}
+  if(ds.k2){set(ds.k2,t.value);save();return}
+  if(ds.t){set(ds.t,t.value);save();return}
+  if(ds.sysname!==undefined){const sy=S.al.sys[+ds.sysname],old=sy.name;sy.name=t.value;for(const x of S.al.secs)if(x.sys===old)x.sys=t.value;if(secF===old)secF=t.value;save();return}
+  if(ds.sf){SF[ds.sf]=t.value;return}
+  if(ds.sff){SF.f[ds.sff]=t.value;const ex=Math.max(0,(num(SF.f.a)*4+num(SF.f.b)*4+num(SF.f.c))/(num(SF.f.d)||1)),el=$("#sfEx");if(el)el.textContent=`مثال: 4×4 کی کھڑکی میں ${f2(num(SF.f.p))} ٹکڑے × ${ftin(ex)} = ${f2(num(SF.f.p)*ex)} فٹ۔`;return}
+  if(ds.secv){const [id,k]=ds.secv.split("."),x=S.al.secs.find(v=>v.id===id);if(!x)return;
+    if(k==="name"){const old=x.name;x.name=t.value;const st=S.al.stock||{};if(st[old]!=null&&!S.al.secs.some(v=>v.name===old)){st[t.value]=st[old];delete st[old]}}
+    else x[k]=k==="ch"&&t.value===""?"":num(t.value);
+    save();renderItems();renderPreview();return}
+  if(ds.stock!==undefined){(S.al.stock=S.al.stock||{})[ds.stock]=t.value;save();if(S.tab==="al"){renderItems()}return}
+  if(ds.rk){const [i,k]=ds.rk.split(".");const r=S.al.rules[ruleSel][+i];if(k==="c2"&&t.value==="")delete r.c2;else r[k]=t.value===""?0:num(t.value);calcAl();return}
+});
+document.addEventListener("change",e=>{
+  const t=e.target,ds=t.dataset;
+  if(ds.sel){set(ds.sel,+t.value);calcAl();return}
+  if(ds.cb){set(ds.cb,t.checked);calcAl();return}
+  if(ds.rsel!==undefined){S.al.rules[ruleSel][+ds.rsel].r=t.value;calcAl();return}
+  if(ds.sfs){SF[ds.sfs]=t.value;if(ds.sfs==="role"){SF.designs=new Set(t.value&&t.value!=="__new"?designsUsing(t.value):[]);const ds_=[...SF.designs];if(ds_.length)SF.kind=ds_.every(k=>KIND_OF(k)==="door")?"door":ds_.some(k=>KIND_OF(k)==="door")?"both":"win";
+      const r=ds_.map(k=>(S.al.rules[k]||[]).find(p=>p.r===t.value)).find(Boolean);if(r)SF.f={p:r.p,a:r.a,b:r.b,c:r.c,d:r.d}}sfRender();return}
+  if(ds.sfd){t.checked?SF.designs.add(ds.sfd):SF.designs.delete(ds.sfd);sfRender();return}
+  if(ds.k2||ds.sysname!==undefined){if(S.tab==="al"){const open=$("details.set").open;renderItems();renderPreview();const s=$("#i_al_form_sys");if(s)[...s.options].forEach((o,i)=>o.textContent=S.al.sys[i].name);$("details.set").open=open}}
+});
+/* ---------- inside the Warsi Book app: sections, rates and rules are shared by every phone of the shop ---------- */
+const IN_APP=window.parent!==window;let applying=false,cfgTimer=0,lastCfg="";
+function sharedCfg(){const al={...S.al};delete al.items;delete al.form;delete al.view;return {al,pan:S.pan,ceil:S.ceil,wp:S.wp,ver:S.ver}}
+function postCfg(){if(!IN_APP||applying)return;clearTimeout(cfgTimer);cfgTimer=setTimeout(()=>{const j=JSON.stringify(sharedCfg());if(j===lastCfg)return;lastCfg=j;parent.postMessage({wbCalc:"save",cfg:j},"*")},1200)}
+if(IN_APP){
+  const cb=$("#closeCalc");cb.hidden=false;cb.onclick=()=>parent.postMessage({wbCalc:"close"},"*");
+  window.addEventListener("message",ev=>{const m=ev.data||{};
+    if(m.wbCalc==="cfg"){const st=$("#syncState");
+      if(m.cfg){try{const c=JSON.parse(m.cfg);applying=true;lastCfg=m.cfg;
+        S.al={...S.al,...c.al,items:S.al.items,form:S.al.form,view:S.al.view};if(c.pan)S.pan=c.pan;if(c.ceil)S.ceil=c.ceil;if(c.wp)S.wp=c.wp;
+        const open=$("details.set")&&$("details.set").open;render();if(open)$("details.set").open=true;}catch(e){console.error(e)}finally{applying=false}}
+      if(st)st.textContent=m.shared?"سیٹنگ دکان کے سب فونوں میں ایک":"سیٹنگ اسی فون میں";}
+    if(m.wbCalc==="back"){const sf=$("#secForm");if(SF&&sf){SF=null;sfRender();return}const d=$("details.set");if(d&&d.open){d.open=false;return}parent.postMessage({wbCalc:"close"},"*")}
+  });
+  parent.postMessage({wbCalc:"get"},"*");
+}
+render();
+</script></body></html>

@@ -28,6 +28,10 @@ if (configured) {
 }
 
 export const COLS = ["branches", "items", "customers", "entries", "sales", "purchases", "expenses"];
+// newer collections: they need the updated Firestore rules; until the owner publishes them the app works without them
+export const EXTRA = ["calc", "closings", "logs"];
+let extraDenied = false;
+export const extraOk = () => !extraDenied;
 const M = {};               // col -> Map(id -> data)
 let onChange = () => {};
 let unsubs = [];
@@ -118,7 +122,7 @@ export const db = {
   }
 };
 
-async function syncCol(col) {
+async function syncCol(col, optional) {
   const m = M[col] || (M[col] = new Map());
   let last = 0;
   try {
@@ -134,12 +138,13 @@ async function syncCol(col) {
       m.set(ch.doc.id, ch.doc.data({ serverTimestamps: "estimate" })); changed = true;
     }
     if (changed) emit();
-  }, e => { console.error(col, e); errHandler(e); }));
+  }, e => { console.error(col, e); if (optional && e && e.code === "permission-denied") { extraDenied = true; emit(); } else errHandler(e); }));
 }
 
 export function startSync(cb, { users } = {}) {
   stopSync(); onChange = cb;
   for (const c of COLS) syncCol(c);
+  for (const c of EXTRA) if (c !== "logs" || users) syncCol(c, true);
   if (users) syncCol("users");
 }
 export function stopSync() { unsubs.forEach(u => u()); unsubs = []; for (const k of Object.keys(M)) delete M[k]; }

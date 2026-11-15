@@ -91,6 +91,18 @@ test("shared photos: staff creates, anyone with the link can open, nobody can li
   await assertFails(updateDoc(doc(mg, "shared/s1"), { data: "y" }));
 });
 
+test("calculator settings, day closings and change history", async () => {
+  const mg = ctx("mg1", "mgr@test.pk");
+  await assertSucceeds(setDoc(doc(mg, "calc/config"), { cfg: "{}" }));
+  await assertSucceeds(setDoc(doc(mg, "closings/c1"), { day: "2026-11-15", counted: 1000 }));
+  await assertSucceeds(setDoc(doc(mg, "logs/l1"), { by: "mg1", what: "x" }));
+  await assertFails(setDoc(doc(mg, "logs/l2"), { by: "someone-else", what: "x" }));
+  await assertFails(updateDoc(doc(mg, "logs/l1"), { what: "y" }));
+  await assertSucceeds(getDocs(collection(mg, "logs")));
+  const anon = env.unauthenticatedContext().firestore();
+  await assertFails(getDoc(doc(anon, "calc/config")));
+});
+
 test("disabled staff loses access", async () => {
   await assertFails(getDoc(doc(ctx("st1", "staff@test.pk"), "items/i1")));
 });

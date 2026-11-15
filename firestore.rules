@@ -57,5 +57,10 @@ service cloud.firestore {
     // nobody can list them, only staff can create
     match /shared/{id} { allow get: if true; allow list: if false; allow create: if isStaff() && request.resource.data.data is string && request.resource.data.data.size() < 1000000; allow update: if false; allow delete: if isManager(); }
     match /expenses/{id}  { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    // calculator settings (one shared document), day closings (cash counted at the end of the day)
+    match /calc/{id}      { allow read: if isStaff(); allow create, update: if isManager(); allow delete: if isManager(); }
+    match /closings/{id}  { allow read: if isStaff(); allow create: if isStaff(); allow update: if isStaff() && noDelete(); allow delete: if isManager(); }
+    // change history: anyone working may add a line, nobody can change or remove one
+    match /logs/{id}      { allow read: if isManager(); allow create: if isStaff() && request.resource.data.by == request.auth.uid; allow update, delete: if false; }
   }
 }
