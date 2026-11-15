@@ -8,6 +8,7 @@ import { checkForUpdate, appVersion } from "./update.js";
 import { App as CapApp } from "@capacitor/app";
 import { Keyboard } from "@capacitor/keyboard";
 import { cameraOpen, closeCamera } from "./scan.js";
+import { printerConf, setPrinterConf, listPrinters, printReceipt, btErrText } from "./printer.js";
 import { saveBinary } from "./native.js";
 
 const $=s=>document.querySelector(s);
@@ -568,6 +569,7 @@ function vBranch(){
       <div class="pad" style="padding-top:0"><button class="btn sm" data-setbranch="${esc(br.id)}">اس برانچ پر کام کریں</button></div></section>`}).join("")}</div>`
   :`<div class="card empty"><strong>کوئی برانچ نہیں</strong><span>اپنی دکان کو پہلی برانچ کے طور پر شامل کریں۔</span>${S.isAdmin?`<button class="btn primary" data-act="newBranch">+ برانچ بنائیں</button>`:""}</div>`}
   ${payCardHtml()}
+  <section class="card pad" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><h3 style="margin:0;font-size:15px">🧾 رسید پرنٹر (بلوٹوتھ)</h3><div class="note">${(()=>{const c=printerConf();return c.address?`${esc(c.name||c.address)} · ${c.width} ملی میٹر${c.auto?" · بل پر خود پرنٹ":""}`:isNative?"ابھی کوئی پرنٹر نہیں چنا":"ویب سائٹ پر رسید عام پرنٹر سے نکلتی ہے"})()}</div></div><button class="btn sm primary" data-act="printer">پرنٹر سیٹ کریں</button></section>
   <div id="teamBox"></div>`;
 }
 
@@ -1057,6 +1059,50 @@ function editEntry(id){
   f.insertAdjacentHTML("afterbegin",`<p class="note edit-note" style="margin:0 0 8px"><b>اندراج میں ترمیم</b> — محفوظ کرنے پر پرانا اندراج بدل جائے گا۔ سیل / خرچے کے سوال دوبارہ پوچھے جائیں گے اور روزنامچہ، سیل اور اسٹاک ساتھ ٹھیک ہو جائیں گے۔ پرانی تصویریں ساتھ رہیں گی۔</p>`);
   setTimeout(()=>{f.scrollIntoView({block:"start",behavior:"smooth"});$("#eAmt").focus()},60);
 }
+/* ---------- thermal receipts ---------- */
+function saleReceiptDoc(s){
+  const c=s.cust&&S.customers.find(x=>x.id===s.cust),bal=c?(balances()[c.id]||0):0;
+  const acc=String(payText()||"").replace(/\*/g,"").split("\n").map(x=>x.trim()).filter(Boolean);
+  return {title:shopTitle(),sub:[],meta:[["بل نمبر","#"+s.no],["تاریخ",new Date(s.date).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})],["گاہک",s.custName||"نقد گاہک"]].map(([a,b])=>[a,b]),
+    lines:(s.lines||[]).map(l=>({name:l.name,qty:fq(l.qty),unit:l.unit||"",price:fq(l.price),amount:fq(l.qty*l.price)})),
+    totals:[["کل رقم",fq(s.total),true],["نقد وصول",fq(s.paid)],...(s.total>s.paid?[["ادھار (کھاتے میں)",fq(s.total-s.paid)]]:[]),...(c&&bal>0?[["کھاتے میں کل بقایا",fq(bal)]]:[])],
+    foot:["خریداری کا شکریہ",...acc]};
+}
+async function printSale(id,quiet){
+  const s=S.sales.find(x=>x.id===id);if(!s)return;
+  if(isNative&&!printerConf().address){sheetPrinter(id);return}
+  if(!quiet)toast("رسید پرنٹ ہو رہی ہے…");
+  try{await printReceipt(saleReceiptDoc(s));if(!quiet||isNative)toast("رسید پرنٹ ہو گئی")}
+  catch(e){console.error(e);toast(e&&e.code==="NOPRINTER"?"پہلے پرنٹر چنیں":btErrText(e))}
+}
+async function printEntry(id){
+  const e=S.entries.find(x=>x.id===id);if(!e)return;if(isNative&&!printerConf().address){sheetPrinter();return}
+  const c=S.customers.find(x=>x.id===e.cust)||{},bal=balances()[c.id]||0,sup=c.kind==="supplier";
+  const dsc=S.entries.find(x=>x.discFor===e.id);
+  try{await printReceipt({title:shopTitle(),sub:[sup?"ادائیگی کی رسید":e.type==="got"?"وصولی کی رسید":"ادھار کی پرچی"],meta:[["تاریخ",new Date(e.date).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})],[sup?"سپلائر":"گاہک",c.name||""]],
+    lines:[],totals:[[e.type==="got"?(sup?"مال آیا":"رقم وصول"):(sup?"رقم ادا کی":"ادھار"),fq(e.amount),true],...(dsc?[["چھوٹ",fq(dsc.amount)]]:[]),[bal>0?(sup?"آپ کے ذمے":"کھاتے میں بقایا"):bal<0?(sup?"ہمارے ذمے باقی":"ہمارے ذمے"):"حساب برابر",fq(Math.abs(bal))]],
+    foot:[e.note||"",sup?"":"شکریہ"].filter(Boolean)});toast("رسید پرنٹ ہو گئی")}
+  catch(err){console.error(err);toast(btErrText(err))}
+}
+async function printTest(){
+  try{await printReceipt({title:shopTitle(),sub:["ٹیسٹ رسید"],meta:[["تاریخ",new Date().toLocaleString("en-GB")]],lines:[{name:"سیمنٹ بیگ",qty:"2",unit:"بیگ",price:"1,450",amount:"2,900"},{name:"پائپ 1/2 انچ",qty:"10",unit:"فٹ",price:"120",amount:"1,200"}],totals:[["کل رقم","4,100",true]],foot:["اگر یہ اردو صاف نظر آ رہی ہے تو پرنٹر ٹھیک جڑا ہے"]});toast("ٹیسٹ رسید بھیج دی")}
+  catch(e){console.error(e);toast(e&&e.code==="NOPRINTER"?"پہلے پرنٹر چنیں":btErrText(e))}
+}
+function sheetPrinter(afterId){
+  S.printAfter=afterId||null;const c=printerConf();
+  openSheet("رسید پرنٹر",`
+    ${isNative?`<ol class="note" style="margin:0 0 10px;padding-inline-start:18px;line-height:2">
+      <li>پرنٹر آن کریں۔ فون کی <b>سیٹنگ › بلوٹوتھ</b> میں جا کر اسے پیئر کریں (PIN پوچھے تو عموماً 0000 یا 1234)۔</li>
+      <li>یہاں "پیئر کیے ہوئے پرنٹر دکھائیں" دبا کر اپنا پرنٹر چنیں۔</li>
+      <li>کاغذ کی چوڑائی چنیں اور ٹیسٹ پرنٹ کریں۔</li></ol>
+      <div class="qr-row" style="margin-bottom:8px"><div><b>${c.address?esc(c.name||c.address):"ابھی کوئی پرنٹر نہیں چنا"}</b><div class="note num">${esc(c.address||"")}</div></div></div>
+      <button class="btn primary" data-plist>پیئر کیے ہوئے پرنٹر دکھائیں</button><div id="pList" style="margin-top:8px"></div>`
+      :`<p class="note">بلوٹوتھ پرنٹر موبائل ایپ سے چلتا ہے۔ ویب سائٹ پر "رسید پرنٹ" دبانے سے رسید عام پرنٹ کی کھڑکی میں کھلتی ہے (کمپیوٹر سے جڑا تھرمل پرنٹر بھی چن سکتے ہیں)۔</p>`}
+    <div class="fld" style="margin-top:12px"><span class="lbl-sm">کاغذ کی چوڑائی</span><div class="seg"><button type="button" data-pwidth="58" aria-pressed="${c.width!==80}">58 ملی میٹر (چھوٹا)</button><button type="button" data-pwidth="80" aria-pressed="${c.width===80}">80 ملی میٹر (بڑا)</button></div></div>
+    ${isNative?`<label class="sale-toggle"><input type="checkbox" id="pAuto" ${c.auto?"checked":""}> <span><b>بل محفوظ ہوتے ہی رسید خود پرنٹ ہو</b><small>ہر نئے بل کے بعد رسید اسی پرنٹر پر نکل آئے گی۔</small></span></label>`:""}
+    <div class="actions" style="margin-top:12px"><button class="btn" data-ptest>ٹیسٹ پرنٹ</button>${afterId?`<button class="btn primary" data-thermal="${esc(afterId)}">یہ بل پرنٹ کریں</button>`:""}</div>
+    <p class="note" style="margin-top:8px">زیادہ تر 58 اور 80 ملی میٹر کے بلوٹوتھ رسید پرنٹر (ESC/POS) اس سے چل جاتے ہیں۔ اردو تصویر کی شکل میں چھپتی ہے، اس لیے پرنٹر میں اردو فونٹ کی ضرورت نہیں۔</p>`);
+}
 function entryFormHtml(type){
   return `<form class="f" data-form="entry" data-type="${type}" style="margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:var(--r)">
     <div class="two"><div class="fld"><label for="eAmt">${(S.customers.find(x=>x.id===S.openCust)||{}).kind==="supplier"?(type==="gave"?"کتنی ادائیگی کی":"کتنے کا مال ملا"):(type==="gave"?"کتنے کا ادھار":"کتنی رقم ملی")}</label><input id="eAmt" name="amount" class="num" inputmode="decimal" required></div>
@@ -1155,7 +1201,7 @@ function sheetSale(id){
    ${s.total>s.paid?`<tr><td colspan="3" class="c-owe">کھاتے میں ادھار</td><td class="n num c-owe">${fq(s.total-s.paid)}</td></tr>`:""}</tbody></table></div>
    ${payBoxHtml()}
    <div class="qr-row" id="billQr"></div>
-   <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF بھیجیں</button><button class="btn" data-billprint="${esc(s.id)}">${PRINT_ICON} پرنٹ</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
+   <div class="actions" style="margin-top:12px"><button class="btn primary" data-billpdf="${esc(s.id)}">${PDF_ICON} بل PDF بھیجیں</button><button class="btn" data-thermal="${esc(s.id)}">🧾 رسید پرنٹ</button><button class="btn" data-billprint="${esc(s.id)}">${PRINT_ICON} پرنٹ (A4)</button>${(()=>{const c=S.customers.find(x=>x.id===s.cust);WA={bill:[c&&c.phone,waBill(s)]};return c&&c.phone?waButtons(c.phone,[["گاہک کو واٹس ایپ پر بل","bill"]]):""})()}<button class="btn" data-copybill="${esc(s.id)}">بل کا متن کاپی کریں</button></div>`);
   fillPayBox(saleDue(s));
   qrDataUrl(billQrText(s)).then(u=>{const q=$("#billQr");if(q)q.innerHTML=`<img src="${u}" alt="بل کا QR کوڈ" width="96" height="96"><div><b>بل کا QR کوڈ</b><div class="note">اسکین کرنے پر بل نمبر، تاریخ، گاہک اور رقم نظر آتی ہے۔</div></div>`});
 }
@@ -1285,6 +1331,7 @@ function sheetEntryView(id){
   openSheet(c.name||"اندراج",`
     <div class="bal-box ${e.type==="gave"?"owe":"pay"}"><div><div class="note">${esc(label)}</div><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${e.type==="gave"?"+":"−"}${fmt(e.amount)}</div></div><div class="note"><span class="num">${dstr(e.date)}</span><br>${esc(branchName(e.branch))}${e.byName?" · "+esc(e.byName):""}</div></div>
     ${tillSaleHtml("e",e.id)}${expLinkHtml(e.id)}
+    ${!e.sale&&!e.purchase?`<div class="actions" style="margin-top:8px"><button class="btn sm" data-thermalent="${esc(e.id)}">🧾 رسید پرنٹ</button></div>`:""}
     ${(e.lines||[]).length?`<h4 style="margin:14px 0 8px;font-size:14px">واپس آیا مال (اسٹاک میں جڑ چکا)</h4><div class="list">${e.lines.map(l=>`<div class="row" style="cursor:default"><div class="main"><div class="t">${esc(l.name)}</div><div class="s"><span class="num">${fq(l.qty)}</span> ${esc(l.unit||"")} × Rs <span class="num">${fq(l.price)}</span></div></div><div class="amt"><div class="v">${fmt(l.qty*l.price)}</div></div></div>`).join("")}</div>`:""}
     <h4 style="margin:14px 0 8px;font-size:14px">بل / رسید کی تصویریں</h4>
     <p class="note" style="margin:0 0 8px">ہر کھاتے میں صرف تازہ بل کی تصویر رہتی ہے۔ یہاں نئی تصویر لگانے سے اس کھاتے کے پرانے اندراجات کی تصویریں ہٹ جائیں گی۔</p>
@@ -1588,6 +1635,7 @@ async function saveSale(){
   const ok=await w(()=>db.batch(ops));
   if(!ok){if(btn)btn.disabled=false;return}
   S.cart=[];S.saleCust="";S.salePaid="";S.saleMode="cash";render();toast("بل #"+no+" محفوظ");sheetSale(ref.id);
+  if(isNative&&printerConf().auto&&printerConf().address)printSale(ref.id,true);
 }
 
 async function savePurchase(){
@@ -1687,6 +1735,15 @@ document.addEventListener("click",async ev=>{
   if("rmstop" in ds){if(RQ){clearTimeout(RQ.t);if(RQ.sms)RQ.stop=true;else{const p=$("#rmProg");if(p)p.innerHTML=`<div class="rm-prog done">روک دیا · ${RQ.i} گاہکوں کو کھولا گیا۔</div>`;RQ=null}}return}
   if(ds.act==="remind"){sheetRemind();return}
   if(ds.act==="calc"){openCalc();return}
+  if(ds.act==="printer"){sheetPrinter();return}
+  if(ds.thermal){printSale(ds.thermal);return}
+  if(ds.thermalent){printEntry(ds.thermalent);return}
+  if(ds.pickprinter){setPrinterConf({address:ds.pickprinter,name:ds.pname||ds.pickprinter});toast("پرنٹر چن لیا: "+(ds.pname||""));sheetPrinter(S.printAfter);return}
+  if(ds.pwidth){setPrinterConf({width:+ds.pwidth});sheetPrinter(S.printAfter);return}
+  if("plist" in ds){const box=$("#pList");box.innerHTML=`<p class="note">پرنٹر ڈھونڈ رہے ہیں…</p>`;
+    try{const L=await listPrinters();box.innerHTML=L.length?`<div class="list">${L.map(d=>`<button class="row" data-pickprinter="${esc(d.address)}" data-pname="${esc(d.name)}"><div class="av">🖨</div><div class="main"><div class="t">${esc(d.name)}</div><div class="s num">${esc(d.address)}</div></div>${printerConf().address===d.address?`<span class="pill pay">چنا ہوا</span>`:""}</button>`).join("")}</div><p class="note">پرنٹر کا نام عموماً "MPT"، "BlueTooth Printer"، "POS"، "RPP" یا "Printer" جیسا ہوتا ہے۔</p>`:`<p class="note">کوئی پیئر کیا ہوا آلہ نہیں ملا۔ پہلے فون کی بلوٹوتھ سیٹنگ میں پرنٹر پیئر کریں۔</p>`}
+    catch(e){box.innerHTML=`<p class="c-owe">${esc(btErrText(e))}</p>`}return}
+  if("ptest" in ds){printTest();return}
   if(ds.act==="supPay"){sheetSupPay();return}
   if(ds.suppay){sheetSupPay(ds.suppay,ds.amt?num(ds.amt):0);return}
   if(ds.wa){const x=WA[ds.wa];if(x)openWhatsApp(x[0],x[1]+photoLinkText(x[2]));return}
@@ -1790,6 +1847,7 @@ document.addEventListener("change",e=>{
   if(t.id==="rmDays"){S.rmDays=t.value;S.rmSel=new Set(rmCands().filter(x=>x.ph).map(x=>x.c.id));rmRender()}
   if(t.id==="rmWaExtra")rmSet("wb_rwa",t.checked?"1":"0");
   if(t.id==="spSel")supPayForm(t.value);
+  if(t.id==="pAuto")setPrinterConf({auto:t.checked});
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
   if(t.id==="updCost")S.updCost=t.checked;

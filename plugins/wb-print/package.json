@@ -1,0 +1,10 @@
+{
+  "name": "wb-print",
+  "version": "1.0.0",
+  "description": "Print to a Bluetooth (classic / SPP) receipt printer — Warsi Book",
+  "main": "index.js",
+  "type": "module",
+  "private": true,
+  "peerDependencies": { "@capacitor/core": ">=7.0.0" },
+  "capacitor": { "android": { "src": "android" } }
+}
