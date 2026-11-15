@@ -7,6 +7,7 @@ import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
 import { App as CapApp } from "@capacitor/app";
 import { Keyboard } from "@capacitor/keyboard";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { cameraOpen, closeCamera } from "./scan.js";
 import { printerConf, setPrinterConf, listPrinters, printReceipt, btErrText } from "./printer.js";
 import { saveBinary } from "./native.js";
@@ -189,6 +190,7 @@ function vHome(){
     <button data-act="newExp"><span class="q-ic out">－</span>خرچہ</button>
     <button data-act="newCust"><span class="q-ic">${ICON.khata}</span>نیا گاہک</button>
     <button data-act="calc"><span class="q-ic calc-ic">${NAAP_ICON}</span>ناپ کیلکولیٹر</button>
+    <button data-act="summary"><span class="q-ic">📋</span>دن کا خلاصہ</button>
   </div>`:""}
   <button class="card dues" data-go="khata">
     <div class="dues-h"><span><small>گاہکوں سے لینے ہیں</small><b class="c-owe">${cnt(recv)}</b></span><span class="dues-mid">اس ماہ سیل <b class="num">${fmt(monthSale)}</b></span><span class="end"><small>سپلائرز کو دینے ہیں</small><b class="c-pay">${cnt(payb)}</b></span></div>
@@ -320,7 +322,7 @@ function vCash(){
   return `${readOnlyBanner()}
   <div class="sec-head"><h2 class="h">روزنامچہ</h2></div>
   <div class="cash-tools${S.canWrite?"":" ro"}"><label class="date-box"><span>تاریخ</span><input type="date" id="cashDate" dir="ltr" value="${d}" max="${todayStr()}"></label>
-    ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button><button class="btn owe big sup-pay" data-act="supPay">+ سپلائر کو ادائیگی</button>`:""}<button class="btn big sup-pay" data-act="accounts">🏦 بینک / موبائل اکاؤنٹ</button></div>
+    ${S.canWrite?`<button class="btn pay big" data-act="newInc">+ آمد</button><button class="btn owe big" data-act="newExp">+ خرچہ</button><button class="btn owe big sup-pay" data-act="supPay">+ سپلائر کو ادائیگی</button>`:""}<button class="btn big sup-pay" data-act="accounts">🏦 بینک / موبائل اکاؤنٹ</button><button class="btn big sup-pay" data-act="summary">📋 دن کا خلاصہ (واٹس ایپ)</button></div>
   <div class="stats">
     <div class="card stat"><span class="lbl">پچھلا کیش (حساب سے)</span><span class="val">${fmt(open)}</span></div>
     <div class="card stat pay"><span class="lbl">آج آمد</span><span class="val">${fmt(tin)}</span></div>
@@ -1270,6 +1272,72 @@ async function autoBackup(){
     localStorage.setItem("wb_backup_auto",String(Date.now()));toast("ہفتہ وار بیک اپ فون میں محفوظ (Documents/WarsiBook)")}catch(e){console.warn("auto backup",e)}
 }
 setTimeout(()=>{autoBackup();setInterval(autoBackup,6*3600e3)},20000);
+/* ---------- one search for everything ---------- */
+function sheetGSearch(){
+  openSheet("تلاش",`<input class="search" id="gsQ" type="search" placeholder="گاہک، سپلائر، فون، چیز، بارکوڈ، بل نمبر یا رقم" autocomplete="off" value="${esc(S.gsq||"")}"><div id="gsRes" style="margin-top:10px"></div>`);
+  gsRender();setTimeout(()=>{const i=$("#gsQ");if(i)i.focus()},60);
+}
+function gsRender(){
+  const box=$("#gsRes");if(!box)return;const q=String(S.gsq||"").trim().toLowerCase(),qd=q.replace(/[^\d]/g,"");
+  if(q.length<1){box.innerHTML=`<p class="note">کچھ لکھیں — نام، فون نمبر، چیز، بارکوڈ، بل نمبر یا رقم۔</p>`;return}
+  const bal=balances(),sec=(t,rows)=>rows.length?`<h4 class="gs-h">${t} <span class="note">(${rows.length})</span></h4><div class="list">${rows.slice(0,8).join("")}</div>`:"";
+  const custs=S.customers.filter(c=>(c.name||"").toLowerCase().includes(q)||(qd.length>=3&&String(c.phone||"").replace(/\D/g,"").includes(qd)))
+    .map(c=>{const v=bal[c.id]||0;return `<button class="row" data-cust="${esc(c.id)}"><div class="av">${esc(initial(c.name))}</div><div class="main"><div class="t">${esc(c.name)} <span class="pill">${c.kind==="supplier"?"سپلائر":"گاہک"}</span></div><div class="s num">${esc(c.phone||"")}</div></div><div class="amt"><div class="v ${v>0?"c-owe":v<0?"c-pay":"c-muted"}">${fmt(Math.abs(v))}</div></div></button>`});
+  const items=S.items.filter(i=>(i.name||"").toLowerCase().includes(q)||(i.cat||"").toLowerCase().includes(q)||codesOf(i).some(x=>String(x.c)===q))
+    .map(i=>`<button class="row" data-gsitem="${esc(i.id)}"><div class="av">📦</div><div class="main"><div class="t">${esc(i.name)}</div><div class="s">اسٹاک <span class="num">${fq(stockOf(i,S.branch))}</span> ${esc(i.unit||"")} · Rs <span class="num">${fq(i.sale)}</span></div></div></button>`);
+  const bills=S.sales.filter(s=>String(s.no).toLowerCase().includes(q)||(s.custName||"").toLowerCase().includes(q)).sort((a,b)=>b.date-a.date)
+    .map(s=>`<button class="row" data-salev="${esc(s.id)}"><div class="av">🧾</div><div class="main"><div class="t">${s.ret?"واپسی":"بل"} #<span class="num">${esc(s.no)}</span> · ${esc(s.custName||"نقد گاہک")}</div><div class="s num">${dstr(s.date)}</div></div><div class="amt"><div class="v">${fmt(s.total)}</div></div></button>`);
+  const amt=num(q),ents=amt>0&&/^[\d,.]+$/.test(q)?S.entries.filter(e=>Math.abs((Number(e.amount)||0)-amt)<0.01).sort((a,b)=>b.date-a.date)
+    .map(e=>{const c=S.customers.find(x=>x.id===e.cust)||{};return `<button class="row" data-gsent="${esc(e.id)}"><div class="av ${e.type==="gave"?"owe":"pay"}">${esc(initial(c.name))}</div><div class="main"><div class="t">${esc(c.name||"")}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||(e.type==="gave"?"دیے":"ملے"))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div></div></button>`}):[];
+  const exps=amt>0&&/^[\d,.]+$/.test(q)?S.expenses.filter(x=>Math.abs((Number(x.amount)||0)-amt)<0.01).sort((a,b)=>b.date-a.date).map(x=>`<button class="row" data-expv-btn="${esc(x.id)}"><div class="av">${x.dir==="in"?"+":"−"}</div><div class="main"><div class="t">${esc(x.note||"")}</div><div class="s num">${dstr(x.date)}</div></div><div class="amt"><div class="v">${fmt(x.amount)}</div></div></button>`):S.expenses.filter(x=>(x.note||"").toLowerCase().includes(q)).sort((a,b)=>b.date-a.date).map(x=>`<button class="row" data-expv-btn="${esc(x.id)}"><div class="av">${x.dir==="in"?"+":"−"}</div><div class="main"><div class="t">${esc(x.note||"")}</div><div class="s num">${dstr(x.date)}</div></div><div class="amt"><div class="v">${fmt(x.amount)}</div></div></button>`);
+  const html=sec("کھاتے",custs)+sec("اسٹاک",items)+sec("بل",bills)+sec("اسی رقم کے اندراج",ents)+sec("روزنامچہ",exps);
+  box.innerHTML=html||`<div class="empty">کچھ نہیں ملا۔</div>`;
+}
+/* ---------- the day's summary (to send on WhatsApp at night) ---------- */
+function daySummary(dayStr){
+  const from=new Date(dayStr+"T00:00:00").getTime(),to=from+864e5,cs=cashSales(from,to),cf=cashFlow(from,to),prev=cashFlow(0,from);
+  const open=sumA(prev.inR)-sumA(prev.out),tin=sumA(cf.inR),tout=sumA(cf.out),inR=x=>inBranch(x)&&x.date>=from&&x.date<to;
+  const ck=id=>S.customers.find(c=>c.id===id)||{};
+  const supPaid=S.entries.filter(e=>inR(e)&&e.type==="gave"&&!e.exp&&ck(e.cust).kind==="supplier").reduce((a,e)=>a+(Number(e.amount)||0),0);
+  const exps=S.expenses.filter(x=>inR(x)&&x.dir!=="in"&&x.pl!==false&&!x.expFor),expT=exps.reduce((a,x)=>a+(Number(x.amount)||0),0);
+  const cats={};for(const x of exps){const k=expCat(x);cats[k]=(cats[k]||0)+(Number(x.amount)||0)}
+  const cl=(S.closings||[]).find(x=>x.id===dayStr+"_"+(S.branch||"all"));
+  const bal=balances(),recv=S.customers.filter(c=>inBranch(c)&&(c.kind||"customer")==="customer").reduce((a,c)=>a+Math.max(0,bal[c.id]||0),0);
+  const prom=S.customers.filter(c=>{const p=promiseState(c);return p&&!p.done&&p.days<=1&&(bal[c.id]||0)>0}).length;
+  const low=S.items.filter(i=>(Number(i.min)||0)>0&&stockOf(i,S.branch)<=Number(i.min)).length;
+  const L=[`*${shopTitle()} — دن کا خلاصہ*`,new Date(from).toLocaleDateString("ur-PK",{weekday:"long",day:"numeric",month:"long"})+(S.branch!=="all"?" · "+branchName(S.branch):""),"",
+    `🛒 *روزانہ سیل: ${fmt(cs.total)}*`,`   بل ${cs.nBills} · نقد ${fmt(cs.bills)}${cs.rec?` · وصولی ${fmt(cs.rec)}`:""}${cs.man?` · دستی ${fmt(cs.man)}`:""}`,
+    cs.credit?`📒 نیا ادھار: ${fmt(cs.credit)}`:null,
+    `💵 آمد ${fmt(tin)} · ادائیگی و خرچ ${fmt(tout)}`,
+    expT?`🧾 خرچے: ${fmt(expT)}`+Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([k,v])=>`\n   ${k}: ${fq(v)}`).join(""):null,
+    supPaid?`🚚 سپلائرز کو ادائیگی: ${fmt(supPaid)}`:null,
+    `🗃 گلّہ: شروع ${fmt(open)} → آخر ${fmt(open+tin-tout)}`,
+    cl?`✅ دن بند: گنا ${fmt(cl.counted)}${cl.diff?` (${cl.diff<0?"کمی":"زیادتی"} ${fmt(Math.abs(cl.diff))})`:" — برابر"}`:"⚠ دن ابھی بند نہیں ہوا",
+    "",`👥 گاہکوں سے کل لینے ہیں: ${fmt(recv)}`,prom?`🤝 کل تک کے وعدے: ${prom}`:null,low?`📦 کم اسٹاک: ${low} چیزیں`:null];
+  return L.filter(x=>x!=null).join("\n").replace(/\n{3,}/g,"\n\n").trim();
+}
+const sumConf=()=>{try{return {phone:"",remind:false,time:"21:00",...JSON.parse(localStorage.getItem("wb_sum")||"{}")}}catch(e){return {phone:"",remind:false,time:"21:00"}}};
+const setSumConf=c=>{try{localStorage.setItem("wb_sum",JSON.stringify({...sumConf(),...c}))}catch(e){}};
+function sheetSummary(day){
+  const d=day||S.cashDate||todayStr(),txt=daySummary(d),c=sumConf();
+  openSheet("دن کا خلاصہ",`<div class="fld"><label for="sumDay" class="lbl-sm">تاریخ</label><input id="sumDay" type="date" dir="ltr" class="date-in" value="${d}" max="${todayStr()}"></div>
+    <pre class="sum-pre">${esc(txt)}</pre>
+    <div class="fld"><label for="sumPhone">کس نمبر پر بھیجنا ہے؟ (اپنا یا شراکت دار کا)</label><input id="sumPhone" class="num" inputmode="tel" dir="ltr" value="${esc(c.phone)}" placeholder="03xx xxxxxxx"></div>
+    <div class="actions"><button class="btn wa" data-sumsend="wa">${WA_ICON} واٹس ایپ پر بھیجیں</button><button class="btn" data-sumsend="copy">کاپی کریں</button></div>
+    ${isNative?`<label class="sale-toggle"><input type="checkbox" id="sumRemind" ${c.remind?"checked":""}> <span><b>ہر رات یاد دلائیں</b><small>اس وقت فون پر اطلاع آئے گی؛ اسے دبائیں تو یہی خلاصہ کھل جائے گا، بس "بھیجیں" دبائیں۔</small></span></label>
+      <div class="fld"><label for="sumTime" class="lbl-sm">وقت</label><input id="sumTime" type="time" dir="ltr" value="${esc(c.time)}"></div>`:""}`);
+  S.sumText=txt;
+}
+async function scheduleSummary(){
+  if(!isNative)return;const c=sumConf();
+  try{await LocalNotifications.cancel({notifications:[{id:7001}]})}catch(e){}
+  if(!c.remind)return;
+  try{const p=await LocalNotifications.requestPermissions();if(p.display!=="granted"){toast("اطلاع کی اجازت نہیں ملی");return}
+    const [h,m]=String(c.time||"21:00").split(":").map(Number);
+    await LocalNotifications.schedule({notifications:[{id:7001,title:"وارثی بک — دن کا خلاصہ",body:"آج کی سیل، خرچہ اور گلّے کا حساب دیکھیں اور بھیجیں",schedule:{on:{hour:h||21,minute:m||0},allowWhileIdle:true},extra:{open:"summary"}}]});
+    toast("ہر روز "+c.time+" بجے یاد دہانی آئے گی")}catch(e){console.error(e);toast("یاد دہانی سیٹ نہیں ہو سکی")}
+}
+if(isNative){try{LocalNotifications.addListener("localNotificationActionPerformed",a=>{if(a&&a.notification&&a.notification.extra&&a.notification.extra.open==="summary")setTimeout(()=>sheetSummary(todayStr()),400)})}catch(e){}}
 /* ---------- thermal receipts ---------- */
 function saleReceiptDoc(s){
   const c=s.cust&&S.customers.find(x=>x.id===s.cust),bal=c?(balances()[c.id]||0):0;
@@ -1990,6 +2058,12 @@ document.addEventListener("click",async ev=>{
   if(ds.act==="remind"){sheetRemind();return}
   if(ds.act==="calc"){openCalc();return}
   if(ds.act==="accounts"){sheetAccounts();return}
+  if(ds.act==="gsearch"){sheetGSearch();return}
+  if(ds.gsitem){sheetItem(ds.gsitem);return}
+  if(ds.gsent){sheetEntryView(ds.gsent);return}
+  if(ds.act==="summary"){sheetSummary();return}
+  if(ds.sumsend){const txt=S.sumText||"";if(ds.sumsend==="copy"){navigator.clipboard&&navigator.clipboard.writeText(txt).then(()=>toast("کاپی ہو گیا")).catch(()=>toast("کاپی نہیں ہو سکا"));return}
+    const ph=(($("#sumPhone")||{}).value||"").trim();setSumConf({phone:ph});openWhatsApp(ph,txt);return}
   if(ds.act==="history"){sheetHistory();return}
   if(ds.hist!==undefined){sheetHistory(ds.hist);return}
   if(ds.act==="bin"){sheetBin();return}
@@ -2091,6 +2165,7 @@ document.addEventListener("input",e=>{
   if(t.id==="eDisc"||t.id==="eAmt")syncDisc();
   if(t.dataset.retq!==undefined){let a=0;document.querySelectorAll("[data-retq]").forEach(i=>{const q=Math.min(num(i.value),Number(i.dataset.max)||0);a+=q*(Number(i.dataset.price)||0)});const el=$("#retAmt");if(el)el.textContent=fmt(a)}
   if(t.dataset.ordq!==undefined){S.order[t.dataset.ordq]=num(t.value)}
+  if(t.id==="gsQ"){S.gsq=t.value;gsRender()}
   if(t.id==="rmTpl"){rmSet("wb_rtpl",t.value);rmSync()}
   if(t.id==="rmMin"){S.rmMin=t.value;const p=t.selectionStart;S.rmSel=new Set(rmCands().filter(x=>x.ph).map(x=>x.c.id));rmRender()}
   if(t.dataset.rq!==undefined||t.dataset.rp!==undefined){const l=S.retLines[+(t.dataset.rq??t.dataset.rp)];if(l){l[t.dataset.rq!==undefined?"qty":"price"]=num(t.value);syncRetAmt();const tt=document.querySelector("#retLines b.num");if(tt)tt.textContent=fmt(retTotal())}}
@@ -2124,6 +2199,9 @@ document.addEventListener("change",e=>{
   if(t.id==="spSel")supPayForm(t.value);
   if(t.id==="pAuto")setPrinterConf({auto:t.checked});
   if(t.id==="ordSup")S.orderSup=t.value;
+  if(t.id==="sumDay"&&t.value)sheetSummary(t.value);
+  if(t.id==="sumRemind"){setSumConf({remind:t.checked});scheduleSummary()}
+  if(t.id==="sumTime"&&t.value){setSumConf({time:t.value});if(sumConf().remind)scheduleSummary()}
   if(t.id==="ordPick"){const it=S.items.find(x=>x.name===t.value.trim());if(it){S.order[it.id]=(S.order[it.id]||0)+1;t.value="";$("#ordLines").innerHTML=orderLinesHtml()}}
   if(t.id==="saleCust"){S.saleCust=t.value;render()}
   if(t.id==="pSupp"){S.pSupp=t.value;render()}
