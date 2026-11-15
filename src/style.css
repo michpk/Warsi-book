@@ -584,3 +584,9 @@ body.kb #sheet{bottom:var(--kb,0px)}
 body.kb #calcFrame{bottom:var(--kb,0px)}
 .quick{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:420px){.quick{gap:6px}.quick button{font-size:12px}}
+/* payment promise, day close */
+.promise-row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--sunk);font-size:14px}
+.promise-row.today{background:var(--warn-bg)}
+.promise-row.late{background:var(--owe-bg);color:var(--owe)}
+.promise-row.done{background:var(--pay-bg);color:var(--pay)}
+.close-card{border:1.5px solid var(--accent)}

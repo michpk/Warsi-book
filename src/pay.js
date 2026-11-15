@@ -91,6 +91,9 @@ function detailRows(a, copy) {
   return rows.map(([k, v]) => `<div class="pay-d"><span>${k}</span><b dir="ltr">${esc(v)}</b>${copy ? `<button type="button" class="btn ghost sm" data-paycopy="${esc(v)}" aria-label="${k} کاپی کریں">کاپی</button>` : ""}</div>`).join("");
 }
 const acctName = a => a.title || KINDS[a.kind]?.name || "اکاؤنٹ";
+/* a stable key for an account (entries remember which account money came into) */
+export const acctKey = (a, i) => a.id || ((a.kind || "x") + ":" + (a.number || a.title || i));
+export const payAccounts = () => accts().map((a, i) => ({ key: acctKey(a, i), name: acctName(a), kind: a.kind, open: Number(a.open) || 0, i }));
 
 /* ---------- block on the bill / ledger sheet ---------- */
 let curAmount = 0, curSel = 0;
