@@ -571,17 +571,14 @@ nav.tabs button[aria-current="page"]{color:var(--accent);font-weight:800}
 .rm-prog.bad{background:var(--owe-bg);color:var(--owe)}
 .rm-actions #rmProg{grid-column:1/-1}.rm-actions #rmProg:empty{display:none}.rm-actions .rm-prog{margin-top:0}
 /* keyboard open / searching (phones) */
-body.kb{padding-bottom:var(--kb,0px)}
-body.kb #sheet{bottom:var(--kb,0px)}
 @media (max-width:859px){
-  body.kb nav.tabs,body.typing nav.tabs{display:none}
+  body.typing nav.tabs{display:none}
   body.typing header.top{position:relative}
   body.typing main::after{content:"";display:block;flex:none;height:75vh}
 }
 /* calculator frame */
 #calcFrame{position:fixed;inset:0;z-index:45;background:var(--bg)}
 #calcFrame iframe{width:100%;height:100%;border:0;display:block}
-body.kb #calcFrame{bottom:var(--kb,0px)}
 .quick{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media (max-width:420px){.quick{gap:6px}.quick button{font-size:12px}}
 /* payment promise, day close */

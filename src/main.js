@@ -6,7 +6,6 @@ import { isNative, saveFile, pickPhoneContact, openWhatsApp, openSMS, saveImage,
 import { qrDataUrl, htmlToPdf, sheetsToXlsx } from "./exports.js";
 import { checkForUpdate, appVersion } from "./update.js";
 import { App as CapApp } from "@capacitor/app";
-import { Keyboard } from "@capacitor/keyboard";
 import { LocalNotifications } from "@capacitor/local-notifications";
 import { cameraOpen, closeCamera } from "./scan.js";
 import { printerConf, setPrinterConf, listPrinters, printReceipt, btErrText } from "./printer.js";
@@ -2286,24 +2285,13 @@ if(isNative)CapApp.addListener("backButton",()=>{if(!goBack())CapApp.minimizeApp
 /* the on-screen keyboard covers the bottom of the app (Android draws edge to edge), so make room for it and keep
    the field being typed in — and a search's results — in view. While searching, the bottom tabs and the tall
    header step aside. */
-let kbBaseH=window.innerHeight;
-window.addEventListener("resize",()=>{if(!document.body.classList.contains("kbopen"))kbBaseH=Math.max(kbBaseH,window.innerHeight)});
-window.addEventListener("orientationchange",()=>setTimeout(()=>{kbBaseH=window.innerHeight},400));
-/* most phones shrink the app when the keyboard opens; then nothing must be added. Only when the app stays
-   full height (keyboard drawn over it) is room made at the bottom. */
-function kbSet(h){
-  const open=h>0;document.body.classList.toggle("kbopen",open);
-  const resized=open&&window.innerHeight<kbBaseH-80,pad=open&&!resized?Math.max(0,h|0):0;
-  document.body.style.setProperty("--kb",pad+"px");document.body.classList.toggle("kb",pad>0);
-  if(open)setTimeout(keepTypingVisible,80);
-}
+/* the phone shrinks the app when the keyboard opens; we only make sure the field being typed in is in view */
 function keepTypingVisible(){
   const a=document.activeElement;if(!a||!/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
   if(a.type==="search"&&!a.closest("#sheet")){const r=a.getBoundingClientRect();if(r.top<4||r.top>90)window.scrollBy({top:r.top-10,behavior:"smooth"});return}
-  a.scrollIntoView({block:"center",behavior:"smooth"});
+  const r=a.getBoundingClientRect();if(r.top<60||r.bottom>window.innerHeight-20)a.scrollIntoView({block:"center",behavior:"smooth"});
 }
-if(isNative){try{Keyboard.addListener("keyboardDidShow",i=>kbSet(i.keyboardHeight||0));Keyboard.addListener("keyboardWillHide",()=>kbSet(0))}catch(e){}}
-else if(window.visualViewport){const vv=window.visualViewport;vv.addEventListener("resize",()=>{const h=window.innerHeight-vv.height;kbSet(h>120?h:0)})}
+window.addEventListener("resize",()=>setTimeout(keepTypingVisible,120));
 document.addEventListener("focusin",e=>{const t=e.target;if(t&&t.type==="search"&&!t.closest("#sheet")){document.body.classList.add("typing");setTimeout(keepTypingVisible,250)}});
 document.addEventListener("focusout",()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.type==="search"))document.body.classList.remove("typing")},150));
 /* ---------- measurement calculator (public/naap.html) in a full-screen frame ----------
