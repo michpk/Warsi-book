@@ -46,6 +46,10 @@ function balances(){const m={};for(const e of S.entries){m[e.cust]=(m[e.cust]||0
 const todayStr=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
 const ymd=t=>new Date(t-new Date(t).getTimezoneOffset()*6e4).toISOString().slice(0,10);
 /* date picker with quick "today / yesterday / day before" buttons, for entering old records */
+/* parts of the app the owner / manager can switch off for now (بل، اسٹاک) — kept in calc/features so every phone follows */
+const featOff=()=>((S.calc||[]).find(x=>x.id==="features")||{}).off||{};
+const feat=k=>!featOff()[k];
+const TAB_FEAT={sale:"bill",stock:"stock"};
 /* owner's limits for staff (برانچیں › ملازم کی حدیں) */
 const lim=k=>!S.isAdmin&&!!(S.limits&&S.limits[k]);
 function dateField(id,name,value){
@@ -120,7 +124,8 @@ const stockOf=(it,b)=>{const s=it.stock||{};if(b==="all")return Object.values(s)
 /* ---------- render shell ---------- */
 function renderTabs(){
   if(S.tab==="report"&&lim("noReports"))S.tab="home";
-  $("#tabs").innerHTML=TABS.filter(([k])=>!(k==="report"&&lim("noReports"))).map(([k,l])=>`<button data-tab="${k}" ${S.tab===k?'aria-current="page"':""}>${ICON[k]}<span>${l}</span></button>`).join("");
+  if(TAB_FEAT[S.tab]&&!feat(TAB_FEAT[S.tab]))S.tab="home";
+  $("#tabs").innerHTML=TABS.filter(([k])=>!(k==="report"&&lim("noReports"))&&!(TAB_FEAT[k]&&!feat(TAB_FEAT[k]))).map(([k,l])=>`<button data-tab="${k}" ${S.tab===k?'aria-current="page"':""}>${ICON[k]}<span>${l}</span></button>`).join("");
 }
 function renderBranchSel(){
   const sel=$("#branchSel");
@@ -169,9 +174,9 @@ function vHome(){
   return `${readOnlyBanner()}
   <section class="dash-hero">
     <div class="dh-top"><div><div class="dh-greet">${greet}${me.name?"، "+esc(String(me.name).split(" ")[0]):""}</div><div class="dh-sub">${S.branch==="all"?"تمام برانچیں":esc(branchName(S.branch))} · آج کی سیل (نقد + وصولی)</div></div>
-      ${S.canWrite?`<button class="dh-new" data-go="sale">+ نیا بل</button>`:""}</div>
+      ${S.canWrite&&feat("bill")?`<button class="dh-new" data-go="sale">+ نیا بل</button>`:""}</div>
     <div class="dh-main">
-      <button class="dh-sale" data-go="sale"><span class="dh-big">${cnt(saleT)}</span>
+      <button class="dh-sale" data-go="${feat("bill")?"sale":"cash"}"><span class="dh-big">${cnt(saleT)}</span>
         <span class="dh-split"><span><i class="dot cash"></i>بلوں کا نقد ${fmt(cs.bills)}</span><span><i class="dot rec"></i>وصولی ${fmt(cs.rec)}</span>${cs.man?`<span><i class="dot man"></i>گلّے / دستی ${fmt(cs.man)}</span>`:""}<span class="dim"><i class="dot cred"></i>ادھار ${fmt(cs.credit)} (شامل نہیں)</span><span>${cs.nBills} بل</span></span></button>
       <div class="dh-week" role="img" aria-label="پچھلے سات دن کی سیل: ${fmt(week)}">
         ${days.map((d,k)=>`<div class="wk${k===6?" today":""}" title="${WD[d.d.getDay()]}: ${fmt(d.v)}"><span class="wk-bar" style="--h:${Math.max(3,Math.round(d.v/top*100))}%;--i:${k}"></span><span class="wk-d">${k===6?"آج":WD[d.d.getDay()]}</span></div>`).join("")}
@@ -185,7 +190,7 @@ function vHome(){
     </div>
   </section>
   ${S.canWrite?`<div class="quick">
-    <button data-go="sale"><span class="q-ic">${ICON.sale}</span>نیا بل</button>
+    ${feat("bill")?`<button data-go="sale"><span class="q-ic">${ICON.sale}</span>نیا بل</button>`:""}
     <button data-act="newInc"><span class="q-ic in">＋</span>آمد</button>
     <button data-act="newExp"><span class="q-ic out">－</span>خرچہ</button>
     <button data-act="newCust"><span class="q-ic">${ICON.khata}</span>نیا گاہک</button>
@@ -197,10 +202,10 @@ function vHome(){
     <div class="dues-bar"><i class="r" style="--w:${share}%"></i><i class="g" style="--w:${100-share}%"></i></div>
   </button>
   <div class="grid2">
-    <section class="card"><div class="card-h"><h3>کم اسٹاک</h3><span class="pill warn">${low.length}</span>${low.length&&S.canWrite?`<button class="btn sm" data-act="order">${WA_ICON} سپلائر کو آرڈر</button>`:""}</div>
+    ${feat("stock")?`<section class="card"><div class="card-h"><h3>کم اسٹاک</h3><span class="pill warn">${low.length}</span>${low.length&&S.canWrite?`<button class="btn sm" data-act="order">${WA_ICON} سپلائر کو آرڈر</button>`:""}</div>
       ${low.length?`<div class="list">${low.map(it=>{const q=stockOf(it,S.branch),mn=Number(it.min)||1;return `<button class="row" data-item="${esc(it.id)}"><div class="main"><div class="t">${esc(it.name)}</div><div class="lowbar"><i style="--w:${Math.min(100,Math.max(4,Math.round(q/mn*100)))}%"></i></div><div class="s">کم از کم ${fq(it.min)} ${esc(it.unit||"")}</div></div><span class="pill warn num">${fq(q)} ${esc(it.unit||"")}</span></button>`}).join("")}</div>`
       :`<div class="empty">سب چیزوں کا اسٹاک ٹھیک ہے۔ جس چیز کا اسٹاک "کم از کم" سے نیچے جائے گا، وہ یہاں آئے گی۔</div>`}
-    </section>
+    </section>`:""}
     ${(()=>{const bal=balances(),L=S.customers.filter(c=>inBranch(c)&&(bal[c.id]||0)>0).map(c=>({c,p:promiseState(c)})).filter(x=>x.p&&!x.p.done&&x.p.days<=1).sort((a,b)=>a.p.days-b.p.days);
       return L.length?`<section class="card"><div class="card-h"><h3>🤝 ادائیگی کے وعدے</h3><span class="pill warn">${L.length}</span></div><div class="list">${L.map(({c,p})=>`<button class="row" data-cust="${esc(c.id)}"><div class="av owe">${esc(initial(c.name))}</div><div class="main"><div class="t">${esc(c.name)}</div><div class="s">${p.label}${p.amount?` · وعدہ <span class="num">${fq(p.amount)}</span>`:""}${p.paid?` · ملے <span class="num">${fq(p.paid)}</span>`:""}</div></div><div class="amt"><div class="v c-owe">${fmt(bal[c.id])}</div><div class="k c-muted">بقایا</div></div></button>`).join("")}</div></section>`:""})()}
     <section class="card"><div class="card-h"><h3>تازہ اندراجات</h3><button class="btn ghost sm" data-go="khata">سب کھاتے</button></div>
@@ -467,7 +472,7 @@ function vReport(){
     ${tbl(["گاہک","فون","بقایا","آخری وصولی"],R.recv.map(r=>{const a=ago(r.last);return `<tr data-cust="${esc(r.c.id)}" style="cursor:pointer"><td><strong>${esc(r.c.name)}</strong></td><td class="n num">${esc(r.c.phone||"")}</td><td class="n num c-owe">${fq(Math.round(r.v))}</td><td class="n">${a===null?`<span class="pill warn">کبھی نہیں</span>`:`<span class="pill ${a>30?"warn":""}">${a===0?"آج":`<span class="num">${a}</span> دن پہلے`}</span>`}</td></tr>`}),"کسی گاہک کے ذمے بقایا نہیں۔")}</section>
   <section class="card"><div class="card-h"><h3>سپلائرز کو دینے ہیں (آج تک)</h3><div class="sec-dl"><span class="pill pay num">${fmt(R.pay.reduce((a,r)=>a+r.v,0))}</span>${secDl("pay")}</div></div>
     ${tbl(["سپلائر","فون","دینے ہیں"],R.pay.map(r=>`<tr data-cust="${esc(r.c.id)}" style="cursor:pointer"><td><strong>${esc(r.c.name)}</strong></td><td class="n num">${esc(r.c.phone||"")}</td><td class="n num c-pay">${fq(Math.round(r.v))}</td></tr>`),"کسی سپلائر کے پیسے باقی نہیں۔")}</section>
-  <div class="grid2">
+  ${feat("stock")?`<div class="grid2">
   <section class="card"><div class="card-h"><h3>سب سے زیادہ منافع والی چیزیں</h3><span class="note">${esc(R.label||"")}</span></div>
     ${(()=>{const m={};for(const s of R.sales)for(const l of s.lines||[]){const k=l.item||l.name,x=m[k]=m[k]||{name:l.name,q:0,v:0,p:0};x.q+=Number(l.qty)||0;x.v+=(Number(l.qty)||0)*(Number(l.price)||0);x.p+=(Number(l.qty)||0)*((Number(l.price)||0)-(Number(l.cost)||0))}
       const L=Object.values(m).filter(x=>x.q>0).sort((a,b2)=>b2.p-a.p).slice(0,12);
@@ -481,7 +486,7 @@ function vReport(){
     ${(()=>{const b=S.branch,its=[...S.items].sort((x,y)=>stockOf(y,b)*(y.cost||0)-stockOf(x,b)*(x.cost||0));const tv=its.reduce((a,i)=>a+stockOf(i,b)*(Number(i.cost)||0),0),tsv=its.reduce((a,i)=>a+stockOf(i,b)*(Number(i.sale)||0),0),low=its.filter(i=>(Number(i.min)||0)>0&&stockOf(i,b)<=Number(i.min)).length;
       return `<div class="kv"><span class="k">مالیت خرید ریٹ پر</span><span class="v">${fmt(tv)}</span><span class="k">مالیت فروخت ریٹ پر</span><span class="v">${fmt(tsv)}</span><span class="k">کم اسٹاک والی چیزیں</span><span class="v">${low}</span></div>`+
       tbl(["چیز","اسٹاک","خرید ریٹ","مالیت"],its.slice(0,25).map(i=>`<tr data-item="${esc(i.id)}" style="cursor:pointer"><td>${esc(i.name)}</td><td class="n num">${fq(stockOf(i,b))} ${esc(i.unit||"")}</td><td class="n num">${fq(i.cost)}</td><td class="n num">${fq(Math.round(stockOf(i,b)*(Number(i.cost)||0)))}</td></tr>`),"اسٹاک میں کوئی چیز نہیں۔")})()}
-  </section>`;
+  </section>`:""}`;
 }
 function csvOf(rows){return "\ufeff"+rows.map(r=>r.map(v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v}).join(",")).join("\r\n")}
 const secDl=k=>`<div class="sec-dl"><button class="btn sm xls" data-sec="${k}:xlsx" aria-label="Excel">Excel</button><button class="btn sm pdf" data-sec="${k}:pdf" aria-label="PDF">PDF</button></div>`;
@@ -590,6 +595,10 @@ function vBranch(){
   :`<div class="card empty"><strong>کوئی برانچ نہیں</strong><span>اپنی دکان کو پہلی برانچ کے طور پر شامل کریں۔</span>${S.isAdmin?`<button class="btn primary" data-act="newBranch">+ برانچ بنائیں</button>`:""}</div>`}
   ${payCardHtml()}
   <section class="card pad" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div style="flex:1;min-width:180px"><h3 style="margin:0;font-size:15px">🧾 رسید پرنٹر (بلوٹوتھ)</h3><div class="note">${(()=>{const c=printerConf();return c.address?`${esc(c.name||c.address)} · ${c.width} ملی میٹر${c.auto?" · بل پر خود پرنٹ":""}`:isNative?"ابھی کوئی پرنٹر نہیں چنا":"ویب سائٹ پر رسید عام پرنٹر سے نکلتی ہے"})()}</div></div><button class="btn sm primary" data-act="printer">پرنٹر سیٹ کریں</button></section>
+  ${S.isAdmin?`<section class="card"><div class="card-h"><h3>🧩 ایپ کے حصے</h3></div><div class="pad" style="display:flex;flex-direction:column;gap:8px">
+    <p class="note" style="margin:0">جو حصے ابھی استعمال نہیں کر رہے انہیں بند رکھیں؛ جب ضرورت ہو کھول لیں۔ پرانا ڈیٹا محفوظ رہتا ہے۔ یہ دکان کے سب فونوں پر لاگو ہوتا ہے۔</p>
+    ${[["bill","🧾 بل (نیا بل، خریداری)"],["stock","📦 اسٹاک (چیزیں، کم اسٹاک، آرڈر)"]].map(([k,l])=>`<div class="feat-row"><span>${l}</span><button class="btn sm ${feat(k)?"pay":"owe"}" data-feattog="${k}" ${extraOk()?"":"disabled"}>${feat(k)?"چالو — بند کریں":"بند — کھولیں"}</button></div>`).join("")}
+    <p class="note" style="margin:0">روزنامچہ، کھاتے (گاہک / سپلائر)، ناپ کیلکولیٹر اور رپورٹس ہمیشہ چالو رہتے ہیں۔${extraOk()?"":" <b>یہ سہولت Firebase کے نئے رولز Publish ہونے کے بعد چلے گی۔</b>"}</p></div></section>`:""}
   ${S.isAdmin?`<section class="card"><div class="card-h"><h3>🛡 حفاظت اور بیک اپ</h3></div><div class="pad" style="display:flex;flex-direction:column;gap:10px">
     <div class="safe-btns"><button class="btn" data-act="history">🕘 تبدیلیوں کی تاریخ</button><button class="btn" data-act="bin">🗑 حذف شدہ اندراجات</button><button class="btn" data-backup="json">💾 بیک اپ (پورا ڈیٹا)</button><button class="btn" data-backup="xlsx">${XL_ICON} Excel میں سب</button></div>
     <p class="note" style="margin:0">${isNative?"موبائل ایپ ہر ہفتے خود بھی فون میں بیک اپ رکھتی ہے (Documents/WarsiBook)۔ ":""}بیک اپ فائل Gmail / Google Drive / واٹس ایپ پر بھیج کر محفوظ کر لیں۔ ضرورت پڑے تو اسی فائل سے ڈیٹا واپس لایا جا سکتا ہے۔${(()=>{let t=0;try{t=+localStorage.getItem("wb_backup_at")||0}catch(e){}return t?` آخری بیک اپ: <span class="num">${new Date(t).toLocaleDateString("en-GB")}</span>`:""})()}</p>
@@ -1039,7 +1048,7 @@ function srcChoiceHtml(type){
   const gk=k==="rec"?`<div class="fld"><span class="lbl-sm">یہ کس چیز کا اندراج ہے؟</span><input type="hidden" name="gk" id="eGk" value="pay">
     <div class="seg" id="eGkSeg">${GOT_KINDS.map(([v,l])=>`<button type="button" data-gk="${v}" aria-pressed="${v==="pay"}">${l}</button>`).join("")}</div>
     <p class="note" id="eGkHint" style="margin:4px 0 0" hidden></p>
-    <div id="retBox" class="ret-box" hidden><span class="lbl-sm">کون سا مال واپس آیا؟ (اسٹاک میں واپس جڑ جائے گا)</span>
+    <div id="retBox" class="ret-box" hidden${feat("stock")?"":' data-off="1"'}><span class="lbl-sm">کون سا مال واپس آیا؟ (اسٹاک میں واپس جڑ جائے گا)</span>
       <input id="retPick" list="retItemList" placeholder="چیز کا نام لکھ کر چنیں یا بارکوڈ لکھیں" autocomplete="off">
       <datalist id="retItemList">${S.items.map(it=>`<option value="${esc(it.name)}">${esc(it.unit||"")} · Rs ${fq(it.sale)}</option>`).join("")}</datalist>
       <div id="retLines"></div></div></div>`:"";
@@ -1290,7 +1299,7 @@ function gsRender(){
   const amt=num(q),ents=amt>0&&/^[\d,.]+$/.test(q)?S.entries.filter(e=>Math.abs((Number(e.amount)||0)-amt)<0.01).sort((a,b)=>b.date-a.date)
     .map(e=>{const c=S.customers.find(x=>x.id===e.cust)||{};return `<button class="row" data-gsent="${esc(e.id)}"><div class="av ${e.type==="gave"?"owe":"pay"}">${esc(initial(c.name))}</div><div class="main"><div class="t">${esc(c.name||"")}</div><div class="s"><span class="num">${dstr(e.date)}</span> · ${esc(e.note||(e.type==="gave"?"دیے":"ملے"))}</div></div><div class="amt"><div class="v ${e.type==="gave"?"c-owe":"c-pay"}">${fmt(e.amount)}</div></div></button>`}):[];
   const exps=amt>0&&/^[\d,.]+$/.test(q)?S.expenses.filter(x=>Math.abs((Number(x.amount)||0)-amt)<0.01).sort((a,b)=>b.date-a.date).map(x=>`<button class="row" data-expv-btn="${esc(x.id)}"><div class="av">${x.dir==="in"?"+":"−"}</div><div class="main"><div class="t">${esc(x.note||"")}</div><div class="s num">${dstr(x.date)}</div></div><div class="amt"><div class="v">${fmt(x.amount)}</div></div></button>`):S.expenses.filter(x=>(x.note||"").toLowerCase().includes(q)).sort((a,b)=>b.date-a.date).map(x=>`<button class="row" data-expv-btn="${esc(x.id)}"><div class="av">${x.dir==="in"?"+":"−"}</div><div class="main"><div class="t">${esc(x.note||"")}</div><div class="s num">${dstr(x.date)}</div></div><div class="amt"><div class="v">${fmt(x.amount)}</div></div></button>`);
-  const html=sec("کھاتے",custs)+sec("اسٹاک",items)+sec("بل",bills)+sec("اسی رقم کے اندراج",ents)+sec("روزنامچہ",exps);
+  const html=sec("کھاتے",custs)+(feat("stock")?sec("اسٹاک",items):"")+(feat("bill")?sec("بل",bills):"")+sec("اسی رقم کے اندراج",ents)+sec("روزنامچہ",exps);
   box.innerHTML=html||`<div class="empty">کچھ نہیں ملا۔</div>`;
 }
 /* ---------- the day's summary (to send on WhatsApp at night) ---------- */
@@ -2001,7 +2010,7 @@ document.addEventListener("click",async ev=>{
   if(ds.tab){S.tab=ds.tab;render();window.scrollTo(0,0);return}
   if(ds.expvBtn){sheetExpView(ds.expvBtn);return}
   if(ds.gk){const i=$("#eGk");if(i){i.value=ds.gk;document.querySelectorAll("#eGkSeg [data-gk]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.gk===ds.gk));
-    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";const db0=$("#eDiscBox");if(db0)db0.hidden=ds.gk!=="pay";const rb=$("#retBox");if(rb){rb.hidden=ds.gk!=="ret";if(ds.gk==="ret")renderRet()}
+    const h=$("#eGkHint");h.hidden=ds.gk==="pay";h.textContent=GK_HINT[ds.gk]||"";const sb=$("#eSrcBox");if(sb)sb.hidden=ds.gk!=="pay";const db0=$("#eDiscBox");if(db0)db0.hidden=ds.gk!=="pay";const rb=$("#retBox");if(rb){rb.hidden=ds.gk!=="ret"||!!rb.dataset.off;if(ds.gk==="ret")renderRet()}
     const lb=document.querySelector('label[for="eAmt"]');if(lb)lb.textContent=ds.gk==="ret"?"کتنے کا مال واپس آیا":ds.gk==="disc"?"کتنی رقم چھوڑی":"کتنی رقم ملی"}return}
   if(ds.src){const ar=$("#eAcctRow");if(ar)ar.hidden=ds.src!=="bank";const i=$("#eSrc");if(i){i.value=ds.src;document.querySelectorAll("#eSrcSeg [data-src]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.src===ds.src));const h=$("#eSrcHint");try{h.textContent=JSON.parse(h.dataset.h)[ds.src]||""}catch(e){}}return}
   if(ds.lblitem){sheetLabels([ds.lblitem]);return}
@@ -2010,7 +2019,7 @@ document.addEventListener("click",async ev=>{
     let v=ds.dset?ds.d:ymd(new Date((inp.value||todayStr())+"T12:00:00").getTime()+Number(ds.k)*864e5);
     inp.value=v;inp.dispatchEvent(new Event("change",{bubbles:true}));
     inp.parentElement.querySelectorAll("[data-dset]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.d===v)));return}
-  if(ds.go){S.tab=ds.go;render();return}
+  if(ds.go){if(TAB_FEAT[ds.go]&&!feat(TAB_FEAT[ds.go])){toast("یہ حصہ ابھی بند ہے (برانچیں › ایپ کے حصے)");return}S.tab=ds.go;render();return}
   if("close" in ds){closeSheet();return}
   if(ds.kind){S.kind=ds.kind;render();return}
   if(ds.bill){S.billMode=ds.bill;render();return}
@@ -2077,7 +2086,8 @@ document.addEventListener("click",async ev=>{
   if(ds.backup){busy(t,()=>backupNow(ds.backup).then(r=>{if(r&&r!=="cancelled")toast("بیک اپ تیار")}));return}
   if(ds.saleret){sheetSaleReturn(ds.saleret);return}
   if(ds.retmode){const i=$("#retMode");if(i)i.value=ds.retmode;document.querySelectorAll("[data-retmode]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.retmode===ds.retmode));return}
-  if(ds.act==="order"){sheetOrder();return}
+  if(ds.act==="order"){if(!feat("stock"))return;sheetOrder();return}
+  if(ds.feattog){const off={...featOff()};off[ds.feattog]=!off[ds.feattog];if(await w(()=>db.set("calc","features",{off,byName:me.name||"",at:Date.now()}))){toast(off[ds.feattog]?"بند کر دیا":"کھول دیا");render()}return}
   if(ds.ordrm){delete S.order[ds.ordrm];$("#ordLines").innerHTML=orderLinesHtml();return}
   if(ds.ordsend){const sup=S.customers.find(c=>c.id===S.orderSup);if(!sup){toast("پہلے سپلائر چنیں");return}if(!Object.values(S.order||{}).some(v=>v>0)){toast("کوئی چیز نہیں");return}
     const txt=orderText(sup);if(ds.ordsend==="wa")openWhatsApp(sup.phone,txt);else openSMS(sup.phone,txt);return}

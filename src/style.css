@@ -599,3 +599,4 @@ body.kb #calcFrame{bottom:var(--kb,0px)}
 @media (min-width:700px){.quick{grid-template-columns:repeat(6,minmax(0,1fr))}}
 .calc-res{display:flex;flex-direction:column;gap:2px;white-space:normal}.calc-res:empty{display:none}
 .calc-expr{font-weight:500;font-size:13px;opacity:.9;direction:ltr;unicode-bidi:isolate;overflow-wrap:anywhere}.calc-eq{font-size:15px;font-weight:700;direction:rtl;font-family:var(--f-body)}
+.feat-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;flex-wrap:wrap}
