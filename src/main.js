@@ -1540,7 +1540,10 @@ function calcField(id,name){
 function calcShow(id){
   const inp=$("#"+id),res=$("#"+id+"Res");if(!inp||!res)return;const v=inp.value.trim();
   if(!/[+\-×÷*/x−()]/.test(v.replace(/^-/,""))){res.textContent="";return}
-  const r=calcEval(v);res.textContent=isNaN(r)?"حساب درست نہیں":"= "+fmt(r)+"  ✓ رقم میں لگائیں";res.classList.toggle("bad",isNaN(r));
+  // the whole sum is shown here too (with all its numbers), so a long sum is never hidden inside the narrow box
+  const r=calcEval(v),expr=v.replace(/\s+/g,"").replace(/([+\-×÷*/x−])/g," $1 ").replace(/^ - /,"-").trim();
+  res.innerHTML=`<span class="calc-expr">${esc(expr)}</span><span class="calc-eq">${isNaN(r)?"حساب درست نہیں":`<bdi dir="ltr">= ${fmt(r)}</bdi> ✓ رقم میں لگائیں`}</span>`;res.classList.toggle("bad",isNaN(r));
+  inp.scrollLeft=inp.scrollWidth;
 }
 function calcKey(id,k){
   const inp=$("#"+id);if(!inp)return;
@@ -1548,6 +1551,8 @@ function calcKey(id,k){
   else if(k==="="){const r=calcEval(inp.value);if(!isNaN(r))inp.value=String(r)}
   else inp.value+=k;
   calcShow(id);inp.dispatchEvent(new Event("input",{bubbles:true}));
+  // keep the end of the sum (what was just pressed) in view inside the box
+  requestAnimationFrame(()=>{inp.scrollLeft=inp.scrollWidth});
 }
 /* ---------- bill photos ---------- */
 const CLIP_ICON='<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7"/></svg>';
@@ -2271,13 +2276,23 @@ if(isNative)CapApp.addListener("backButton",()=>{if(!goBack())CapApp.minimizeApp
 /* the on-screen keyboard covers the bottom of the app (Android draws edge to edge), so make room for it and keep
    the field being typed in — and a search's results — in view. While searching, the bottom tabs and the tall
    header step aside. */
-function kbSet(h){document.body.style.setProperty("--kb",Math.max(0,h|0)+"px");document.body.classList.toggle("kb",h>0);if(h>0)setTimeout(keepTypingVisible,80)}
+let kbBaseH=window.innerHeight;
+window.addEventListener("resize",()=>{if(!document.body.classList.contains("kbopen"))kbBaseH=Math.max(kbBaseH,window.innerHeight)});
+window.addEventListener("orientationchange",()=>setTimeout(()=>{kbBaseH=window.innerHeight},400));
+/* most phones shrink the app when the keyboard opens; then nothing must be added. Only when the app stays
+   full height (keyboard drawn over it) is room made at the bottom. */
+function kbSet(h){
+  const open=h>0;document.body.classList.toggle("kbopen",open);
+  const resized=open&&window.innerHeight<kbBaseH-80,pad=open&&!resized?Math.max(0,h|0):0;
+  document.body.style.setProperty("--kb",pad+"px");document.body.classList.toggle("kb",pad>0);
+  if(open)setTimeout(keepTypingVisible,80);
+}
 function keepTypingVisible(){
   const a=document.activeElement;if(!a||!/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))return;
   if(a.type==="search"&&!a.closest("#sheet")){const r=a.getBoundingClientRect();if(r.top<4||r.top>90)window.scrollBy({top:r.top-10,behavior:"smooth"});return}
   a.scrollIntoView({block:"center",behavior:"smooth"});
 }
-if(isNative){try{Keyboard.addListener("keyboardWillShow",i=>kbSet(i.keyboardHeight||0));Keyboard.addListener("keyboardWillHide",()=>kbSet(0))}catch(e){}}
+if(isNative){try{Keyboard.addListener("keyboardDidShow",i=>kbSet(i.keyboardHeight||0));Keyboard.addListener("keyboardWillHide",()=>kbSet(0))}catch(e){}}
 else if(window.visualViewport){const vv=window.visualViewport;vv.addEventListener("resize",()=>{const h=window.innerHeight-vv.height;kbSet(h>120?h:0)})}
 document.addEventListener("focusin",e=>{const t=e.target;if(t&&t.type==="search"&&!t.closest("#sheet")){document.body.classList.add("typing");setTimeout(keepTypingVisible,250)}});
 document.addEventListener("focusout",()=>setTimeout(()=>{const a=document.activeElement;if(!(a&&a.type==="search"))document.body.classList.remove("typing")},150));
